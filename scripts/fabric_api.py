@@ -66,7 +66,8 @@ class FabricApi:
             r = requests.get(f"{API}{ruta}", headers=self._headers(), params=params, timeout=60)
             r.raise_for_status()
             cuerpo = r.json()
-            elementos += cuerpo.get("value", [])
+            # La mayoría de las listas viene en "value"; la de tablas de un lakehouse, en "data".
+            elementos += cuerpo.get("value", cuerpo.get("data", []))
             if not cuerpo.get("continuationToken"):
                 return elementos
             params = {"continuationToken": cuerpo["continuationToken"]}
