@@ -68,8 +68,10 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
 
 ### D7. Autenticación: tu usuario de Microsoft Entra ID, por ahora
 
-- Los scripts piden un token de Entra ID con `azure-identity`: la primera vez abre el navegador, y
-  después lo toma de una caché cifrada que queda fuera del repo.
+- Los scripts piden un token de Entra ID con `azure-identity`, con **código de dispositivo**: la
+  primera vez imprimen una dirección y un código para iniciar sesión, y después toman el token de
+  una caché cifrada que queda fuera del repo. Se eligió este flujo porque el que abre el navegador
+  dependía de que la ventana apareciera y se cortó a los 5 minutos (probado el 9/11).
 - El mismo inicio de sesión sirve para la API de Fabric y para OneLake, que solo acepta tokens con
   audiencia Storage, igual que ADLS (verificado, "How do I connect to OneLake?").
 - Para desplegar desde un pipeline de CI/CD hace falta un service principal (F8).

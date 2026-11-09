@@ -12,7 +12,7 @@ from pathlib import Path
 import requests
 from azure.identity import (
     AuthenticationRecord,
-    InteractiveBrowserCredential,
+    DeviceCodeCredential,
     TokenCachePersistenceOptions,
 )
 
@@ -25,17 +25,27 @@ _REGISTRO = Path.home() / ".fabric-oil-lakehouse" / "auth_record.json"
 _CACHE = TokenCachePersistenceOptions(name="fabric-oil-lakehouse")  # cifrada por el sistema
 
 
-def credencial() -> InteractiveBrowserCredential:
+def _mostrar_codigo(url: str, codigo: str, _vence) -> None:
+    print(f"\nPara iniciar sesión, abrí {url} e ingresá el código {codigo}\n", flush=True)
+
+
+def credencial() -> DeviceCodeCredential:
+    """Inicio de sesión con código de dispositivo: no depende de que se abra una ventana.
+
+    La primera vez imprime una dirección y un código; después usa la caché sin pedir nada.
+    Es el mismo flujo que `az login --use-device-code` en Azure.
+    """
     tenant = os.environ.get("FABRIC_TENANT_ID")
     if not tenant:
         sys.exit("Falta la variable FABRIC_TENANT_ID (el ID del directorio de Entra ID).")
     if _REGISTRO.exists():
         registro = AuthenticationRecord.deserialize(_REGISTRO.read_text())
-        return InteractiveBrowserCredential(
+        return DeviceCodeCredential(
             tenant_id=tenant, cache_persistence_options=_CACHE, authentication_record=registro
         )
-    cred = InteractiveBrowserCredential(tenant_id=tenant, cache_persistence_options=_CACHE)
-    print("Se abre el navegador para iniciar sesión.")
+    cred = DeviceCodeCredential(
+        tenant_id=tenant, cache_persistence_options=_CACHE, prompt_callback=_mostrar_codigo
+    )
     registro = cred.authenticate(scopes=[SCOPE_API])
     _REGISTRO.parent.mkdir(parents=True, exist_ok=True)
     _REGISTRO.write_text(registro.serialize())

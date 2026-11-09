@@ -21,7 +21,13 @@ WORKSPACES = {
 
 
 def capacidad(api: FabricApi) -> dict:
-    activas = [c for c in api.listar("/capacities") if c.get("state") == "Active"]
+    """La capacidad de Fabric activa. Las de Fabric tienen SKU F (de prueba: FT); se descartan las
+    de Power BI, como Premium Per User (PP), porque no corren lakehouses ni pipelines."""
+    activas = [
+        c
+        for c in api.listar("/capacities")
+        if c.get("state") == "Active" and c.get("sku", "").startswith("F")
+    ]
     elegida = os.environ.get("FABRIC_CAPACITY_ID")
     if elegida:
         activas = [c for c in activas if c["id"] == elegida]
@@ -34,7 +40,7 @@ def capacidad(api: FabricApi) -> dict:
 def main() -> None:
     api = FabricApi()
     cap = capacidad(api)
-    print(f"Capacidad: {cap['displayName']} · {cap['sku']} · {cap['region']}")
+    print(f"Capacidad: {cap['displayName']} | {cap['sku']} | {cap['region']}")
 
     existentes = {ws["displayName"]: ws for ws in api.listar("/workspaces")}
     for ambiente, nombre in WORKSPACES.items():
