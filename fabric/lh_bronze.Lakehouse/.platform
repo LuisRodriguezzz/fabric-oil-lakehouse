@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Lakehouse",
+    "displayName": "lh_bronze",
+    "description": "Bronze: cada entrega tal como llego, en Files/landing y en tablas Delta de texto."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "2c434faf-a646-ac5c-4346-fe512128bd97"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Lakehouse",
+    "displayName": "lh_silver",
+    "description": "Silver: estado vigente tipado y validado, mas cuarentena."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "b8f4a3f7-e73e-a328-4e48-3ff8ecefc241"
+  }
+}
