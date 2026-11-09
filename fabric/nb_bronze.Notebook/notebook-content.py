@@ -12,15 +12,13 @@
 # MARKDOWN ********************
 
 # # Bronze: cada entrega de landing, tal como llegó, en una tabla Delta
-#
-# - **Lee** `lh_bronze/Files/landing/<fuente>/ingest_date=AAAA-MM-DD/*.csv`.
+# # - **Lee** `lh_bronze/Files/landing/<fuente>/ingest_date=AAAA-MM-DD/*.csv`.
 # - **Escribe** `lh_bronze/Tables/<fuente>`: todas las columnas como texto, más el linaje
 #   (`_archivo`, `ingest_date`, `_cargado_en`). Tipar y validar es trabajo de silver.
 # - **Cada archivo entra una sola vez:** Structured Streaming con un checkpoint y
 #   `trigger(availableNow=True)` procesa solo lo nuevo y termina. Volver a correrlo no duplica.
 # - **Sirve en dev y en prod sin cambios:** arma las rutas con el nombre del workspace donde corre.
-#
-# En Azure, lo mismo se hace en Databricks con Auto Loader, o en Synapse Spark con este mismo código.
+# # En Azure, lo mismo se hace en Databricks con Auto Loader, o en Synapse Spark con este mismo código.
 
 # CELL ********************
 
