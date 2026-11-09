@@ -131,7 +131,7 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
   trabajo de silver, igual que en Databricks.
 - **Por qué no Auto Loader:** es de Databricks; Fabric corre Spark abierto, y el stream de
   archivos con checkpoint es la versión de Spark de la misma idea.
-- El BOM pegado al nombre de la primera columna del padrón se limpia al armar el esquema.
+- El esquema sale de un contrato por fuente (D13), no de los archivos.
 - **En Azure:** Databricks con Auto Loader, o Synapse Spark con este mismo código.
 
 ### D11. Los notebooks son código en el repo; el workspace se actualiza desde Git
@@ -147,3 +147,27 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
 - `git_workspace.py` (status, commit, update) es el panel "Source control" del portal.
 - `correr.py` corre un notebook o un pipeline y espera el resultado (API de Job Scheduler).
 - **En Azure:** `az datafactory pipeline create-run` o la API de ADF; en Databricks, la CLI.
+
+### D13. Bronze controla el encabezado de cada archivo contra un contrato
+
+- **El problema:** cuando se le da el esquema a un lector de CSV, Spark por defecto
+  (`enforceSchema=True`) ignora el encabezado y asigna las columnas **por posición**. Si la
+  fuente invierte dos columnas, bronze las mezcla sin avisar; si agrega una, la descarta.
+- **Probado** en el sandbox (9/11, notebook `prueba_encabezados` en `chevron-lab`): con el
+  encabezado `idpozo,prod_gas,prod_pet`, el pozo con 200 de petróleo y 7 de gas quedó con
+  `prod_pet = 7`, y la columna extra `prod_agua` desapareció. Con `enforceSchema=False`, los dos
+  casos fallan nombrando el archivo, y un archivo correcto pasa.
+- **La decisión:** cada fuente declara su contrato (`CONTRATOS` en `nb_bronze`: las columnas en
+  orden) y el stream lee con `enforceSchema=False`. Si un archivo no coincide, la carga falla; el
+  archivo queda en landing, alguien decide, cambia el contrato con un commit y vuelve a correr.
+  El checkpoint no registra la tanda fallida, así que el archivo se reprocesa.
+- **Costo aceptado:** un archivo distinto frena la carga de esa fuente hasta que alguien lo mire.
+  Con una entrega por mes, es preferible a datos mezclados.
+- **El BOM no estorba:** el archivo del padrón empieza con los bytes `EF BB BF`, pero el lector
+  de líneas de Spark los saca antes de comparar. Ya no hace falta limpiarlo a mano.
+- **Verificar el verificador:** `count()` no sirve para probar el contrato, porque sin columnas
+  pedidas Spark no parsea el CSV y no controla el encabezado (un contrato mal a propósito dio OK).
+  La prueba válida lee todas las columnas.
+- **En Azure:** con Databricks, Auto Loader trae evolución de esquema y la columna
+  `_rescued_data` para lo que no encaja; con Synapse Spark o este mismo código, el contrato y
+  `enforceSchema=False` como acá.

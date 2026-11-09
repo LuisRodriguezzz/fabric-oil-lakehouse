@@ -15,6 +15,7 @@
 # - **Lee** `lh_bronze/Files/landing/<fuente>/ingest_date=AAAA-MM-DD/*.csv`.
 # - **Escribe** `lh_bronze/Tables/<fuente>`: todas las columnas como texto, más el linaje
 #   (`_archivo`, `ingest_date`, `_cargado_en`). Tipar y validar es trabajo de silver.
+# - **Contrato de columnas:** cada fuente declara su encabezado. Si un archivo llega con otras columnas u otro orden, la carga falla y nombra el archivo (`enforceSchema=False`), en vez de mezclar datos en silencio.
 # - **Cada archivo entra una sola vez:** Structured Streaming con un checkpoint y
 #   `trigger(availableNow=True)` procesa solo lo nuevo y termina. Volver a correrlo no duplica.
 # - **Sirve en dev y en prod sin cambios:** arma las rutas con el nombre del workspace donde corre.
@@ -25,14 +26,22 @@
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType, StructField, StructType
 
-FUENTES = ["produccion", "padron"]
+# El contrato de cada fuente: el encabezado que esperamos, columna por columna y en orden.
+# Cambiar un contrato es un commit revisado, no algo que pasa solo cuando cambia la fuente.
+CONTRATOS = {
+    "produccion": (
+        "idempresa,anio,mes,idpozo,prod_pet,prod_gas,prod_agua,iny_agua,iny_gas,iny_co2,iny_otro,"
+        "tef,vida_util,tipoextraccion,tipoestado,tipopozo,observaciones,fechaingreso,rectificado,"
+        "habilitado,idusuario,empresa,sigla,formprod,profundidad,formacion,idareapermisoconcesion,"
+        "areapermisoconcesion,idareayacimiento,areayacimiento,cuenca,provincia,tipo_de_recurso,"
+        "proyecto,clasificacion,subclasificacion,sub_tipo_recurso,fecha_data,id"
+    ).split(","),
+    "padron": "idpozo,anio,mes".split(","),
+}
 
 # El workspace donde corre el notebook: oil-dev o oil-prod. Así no hay IDs fijos en el código.
 WORKSPACE = notebookutils.runtime.context["currentWorkspaceName"]  # noqa: F821
 BRONZE = f"abfss://{WORKSPACE}@onelake.dfs.fabric.microsoft.com/lh_bronze.Lakehouse"
-
-# Algunos CSV del portal traen la marca BOM pegada al nombre de la primera columna.
-BOM = "﻿"
 
 print(f"Workspace: {WORKSPACE}")
 
@@ -45,17 +54,11 @@ print(f"Workspace: {WORKSPACE}")
 
 # CELL ********************
 
-def esquema_de_texto(origen: str) -> StructType:
-    """Las columnas del encabezado, todas como texto, más ingest_date (sale de la carpeta).
-
-    Un stream de archivos necesita el esquema de antemano. Se toma del encabezado de lo que ya
-    está en landing; con enforceSchema (el valor por defecto) Spark lee por posición, así que los
-    nombres se pueden limpiar del BOM.
-    """
-    encabezado = spark.read.option("header", True).csv(origen).schema  # noqa: F821
-    columnas = [c.name.lstrip(BOM) for c in encabezado if c.name != "ingest_date"]
+def esquema(fuente: str) -> StructType:
+    """Las columnas del contrato, todas como texto, más ingest_date (sale de la carpeta)."""
     return StructType(
-        [StructField(c, StringType()) for c in columnas] + [StructField("ingest_date", StringType())]
+        [StructField(c, StringType()) for c in CONTRATOS[fuente]]
+        + [StructField("ingest_date", StringType())]
     )
 
 
@@ -65,8 +68,11 @@ def ingerir(fuente: str) -> None:
     checkpoint = f"{BRONZE}/Files/_checkpoints/bronze_{fuente}"
 
     consulta = (
-        spark.readStream.schema(esquema_de_texto(origen))  # noqa: F821
+        spark.readStream.schema(esquema(fuente))  # noqa: F821
         .option("header", True)
+        # Por defecto Spark ignora el encabezado y asigna las columnas por posición: si la fuente
+        # invierte dos columnas, las mezcla sin avisar. Así compara cada encabezado con el contrato.
+        .option("enforceSchema", False)
         .csv(origen)
         .withColumn("_archivo", F.input_file_name())
         .withColumn("_cargado_en", F.current_timestamp())
@@ -80,7 +86,7 @@ def ingerir(fuente: str) -> None:
     print(f"bronze.{fuente}: {filas} filas en total")
 
 
-for fuente in FUENTES:
+for fuente in CONTRATOS:
     ingerir(fuente)
 
 # METADATA ********************
