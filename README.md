@@ -42,3 +42,11 @@ set FABRIC_TENANT_ID=<id del directorio de Entra ID>
 
 Crea los workspaces `oil-dev` y `oil-prod` en la capacidad. Es idempotente: se puede volver a
 correr sin duplicar nada.
+
+```
+.venv\Scripts\python scripts\conectar_git.py
+```
+
+Conecta `oil-dev` a la rama `main`, carpeta `fabric/`. Necesita antes una conexión de GitHub en
+Fabric con un token *fine-grained* (solo este repo, Contents: Read and write). La primera vez
+inicia sesión con un código de dispositivo; después usa la caché.

@@ -43,7 +43,22 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
   git integration").
 - **Por qué GitHub y no Azure DevOps:** crear una organización de Azure DevOps exige una
   suscripción de Azure (verificado, "Create an organization", 3/3/2026).
-- **En Azure:** Azure Repos, con la misma integración de Git.
+- **Cómo se conecta:** con `scripts/conectar_git.py`, por la API (`git/connect` y
+  `git/initializeConnection`), idempotente. El token de GitHub no pasa por el repo: vive en una
+  **conexión** de Fabric (`luis-github`, tipo GitHubSourceControl) que se crea una vez desde el
+  portal. Es un token *fine-grained* con un solo repo y solo **Contents: Read and write**, el mínimo
+  que pide la doc.
+- **Lo que costó (9/11):**
+  - El switch de tenant "Users can sync workspace items with GitHub repositories" venía apagado;
+    lo prende un administrador de Fabric (rol de Entra ID). Con GitHub no se aplican las
+    restricciones multi-geo, así que el switch de "otras ubicaciones geográficas" no hace falta.
+  - Por la API, la carpeta tiene que existir en la rama: sin `fabric/` respondió
+    `GitProviderResourceNotFound`. Por eso `fabric/README.md`.
+  - Verificado: estado `ConnectedAndInitialized`, rama `main`, carpeta `/fabric`; la segunda
+    corrida del script no cambia nada.
+- **En Azure:** Azure Repos, con la misma integración de Git, sin token: se autentica con la cuenta
+  de Entra ID o con un service principal. Los switches de tenant equivalen a lo que en Azure se
+  gobierna con Azure Policy.
 
 ### D5. Despliegue a prod: deployment pipelines y `fabric-cicd`; Azure Pipelines queda escrito
 

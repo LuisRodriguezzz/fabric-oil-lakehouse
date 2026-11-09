@@ -74,7 +74,9 @@ class FabricApi:
     def post(self, ruta: str, cuerpo: dict | None = None) -> dict:
         """POST que espera las operaciones largas (respuesta 202 con Location)."""
         r = requests.post(f"{API}{ruta}", headers=self._headers(), json=cuerpo, timeout=60)
-        r.raise_for_status()
+        if not r.ok:
+            # El cuerpo trae el código de error de Fabric (errorCode), que explica el porqué.
+            raise RuntimeError(f"POST {ruta} -> {r.status_code}: {r.text}")
         if r.status_code == 202 and "Location" in r.headers:
             return self._esperar(r)
         return r.json() if r.content else {}
