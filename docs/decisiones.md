@@ -92,3 +92,58 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
 - Para desplegar desde un pipeline de CI/CD hace falta un service principal (F8).
 - **En Azure:** igual, con Entra ID. En Azure DevOps, el service principal va en una service
   connection.
+
+## Data Lake y bronze (F1)
+
+### D8. Un lakehouse por capa: `lh_bronze` y `lh_silver`
+
+- **Qué es un lakehouse:** un item de Fabric con dos zonas en OneLake: `Files/` para archivos
+  sueltos (cualquier formato) y `Tables/` para tablas Delta, que se pueden consultar con Spark y
+  con SQL.
+- **Por qué uno por capa:** la doc de medallion en Fabric pide separar cada capa en su propio
+  lakehouse (verificado). Así cada capa tiene sus permisos y no se mezclan datos crudos con datos
+  limpios. Gold va a ser un **Warehouse** (F5), el segundo patrón de esa doc.
+- **Cómo se crearon:** por la API en `oil-dev` y guardados en Git desde el workspace
+  (`git_workspace.py commit`). En el repo, un lakehouse es solo metadatos (`.platform`,
+  `lakehouse.metadata.json`): sus datos nunca van a Git (verificado en el commit `a20ae4a`).
+- **En Azure:** un storage account de ADLS Gen2 con un container por capa (o un storage account
+  por capa si se necesitan permisos o redes distintas).
+
+### D9. Landing dentro de `lh_bronze/Files`, por fuente y fecha de entrega, inmutable
+
+- Ruta: `Files/landing/<fuente>/ingest_date=AAAA-MM-DD/<archivo>`.
+- **Por qué `ingest_date=` en la carpeta:** Spark la lee como una columna (`ingest_date`), así
+  cada fila sabe de qué entrega vino. Es lo mismo que la D4 del proyecto de Databricks.
+- **Por qué inmutable:** si la fuente corrige datos, llega un archivo nuevo en otra fecha y bronze
+  guarda las dos versiones; elegir la vigente es trabajo de silver. `subir_a_landing.py` se niega
+  a pisar un archivo que ya existe (probado el 9/11).
+- **Quién escribe en landing:** en producción, el pipeline de Data Factory que copia desde el
+  portal (F2). Hasta entonces, `subir_a_landing.py` hace de proveedor.
+- **En Azure:** un container `landing` en ADLS con las mismas carpetas; la actividad Copy de Azure
+  Data Factory escribe ahí.
+
+### D10. Bronze con Structured Streaming y checkpoint: cada archivo entra una sola vez
+
+- `nb_bronze` lee landing como un stream de archivos con `trigger(availableNow=True)`: procesa
+  lo que todavía no procesó y termina. El **checkpoint** (`Files/_checkpoints/bronze_<fuente>`)
+  guarda qué archivos ya leyó; volver a correr el notebook no duplica filas.
+- Todo como texto, más el linaje: `_archivo`, `ingest_date`, `_cargado_en`. Tipar y validar es
+  trabajo de silver, igual que en Databricks.
+- **Por qué no Auto Loader:** es de Databricks; Fabric corre Spark abierto, y el stream de
+  archivos con checkpoint es la versión de Spark de la misma idea.
+- El BOM pegado al nombre de la primera columna del padrón se limpia al armar el esquema.
+- **En Azure:** Databricks con Auto Loader, o Synapse Spark con este mismo código.
+
+### D11. Los notebooks son código en el repo; el workspace se actualiza desde Git
+
+- `fabric/nb_bronze.Notebook/notebook-content.py` se escribe en el repo y se lleva a `oil-dev`
+  con `git_workspace.py update`. El repo es la fuente de verdad.
+- **Sin IDs en el código:** el notebook arma las rutas con el nombre del workspace donde corre
+  (`notebookutils.runtime.context`), así el mismo código sirve en `oil-dev` y en `oil-prod`.
+- **En Azure:** Synapse y ADF tienen la misma integración de Git; en Databricks, el bundle.
+
+### D12. Operar desde la terminal con la API
+
+- `git_workspace.py` (status, commit, update) es el panel "Source control" del portal.
+- `correr.py` corre un notebook o un pipeline y espera el resultado (API de Job Scheduler).
+- **En Azure:** `az datafactory pipeline create-run` o la API de ADF; en Databricks, la CLI.

@@ -39,11 +39,11 @@ def correr(nombre: str) -> None:
     while True:
         time.sleep(15)
         estado = requests.get(instancia, headers=api._headers(), timeout=60).json()
-        print(f"  {int(time.time() - inicio)} s · {estado.get('status')}", flush=True)
+        print(f"  {int(time.time() - inicio)} s - {estado.get('status')}", flush=True)
         if estado.get("status") in ("Completed", "Failed", "Cancelled", "Deduped"):
             break
     if estado.get("status") != "Completed":
-        sys.exit(f"{nombre}: {estado.get('status')} · {estado.get('failureReason')}")
+        sys.exit(f"{nombre}: {estado.get('status')} - {estado.get('failureReason')}")
     print(f"{nombre}: terminó bien")
 
 
