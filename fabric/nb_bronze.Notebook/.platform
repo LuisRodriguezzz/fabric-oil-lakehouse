@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "nb_bronze",
+    "description": "Bronze: cada entrega de landing en una tabla Delta, una sola vez."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "9c89e3fe-d25c-4f01-ad0d-4676a52c1c3e"
+  }
+}
