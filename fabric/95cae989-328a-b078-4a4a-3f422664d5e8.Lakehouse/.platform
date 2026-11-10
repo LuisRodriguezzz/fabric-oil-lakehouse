@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
   "metadata": {
     "type": "Lakehouse",
-    "displayName": "lh_silver",
-    "description": "Silver: estado vigente tipado y validado, mas cuarentena."
+    "displayName": "lh_bronze",
+    "description": "Bronze: landing (Files) y tablas tal como llegaron (Tables), con schemas."
   },
   "config": {
     "version": "2.0",
-    "logicalId": "b8f4a3f7-e73e-a328-4e48-3ff8ecefc241"
+    "logicalId": "95cae989-328a-b078-4a4a-3f422664d5e8"
   }
 }
