@@ -25,6 +25,7 @@
 # - **Sirve en dev y en prod sin cambios:** arma las rutas con el nombre del workspace donde corre.
 # - **En Azure:** en Databricks, Auto Loader con `addNewColumns`; en Synapse Spark, este código.
 
+
 # CELL ********************
 
 import re
