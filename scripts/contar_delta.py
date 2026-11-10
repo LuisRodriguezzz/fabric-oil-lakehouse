@@ -4,7 +4,7 @@ Recorre los commits en orden: cada `add` suma un archivo a la versión actual y 
 saca. Las filas son la suma de `numRecords` (de las estadísticas de cada `add`) de los archivos que
 quedan vigentes. Es lo que viste en "Delta por dentro", aplicado a OneLake con el SDK de ADLS.
 
-Uso: .venv\\Scripts\\python scripts\\contar_delta.py <lakehouse> <tabla>   (ej.: lh_bronze produccion)
+Uso: .venv\\Scripts\\python scripts\\contar_delta.py <lakehouse> <tabla>   (ej.: lh_bronze energia/produccion)
 """
 
 import json

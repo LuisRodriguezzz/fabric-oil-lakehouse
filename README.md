@@ -24,11 +24,11 @@ Las decisiones, con su porqué y su equivalente en Azure, están en
 ## Estructura
 
 ```
-docs/decisiones.md   decisiones numeradas (D1 a D14), cada una con su equivalente en Azure
+docs/decisiones.md   decisiones numeradas (D1 a D15), cada una con su equivalente en Azure
 fabric/              items de Fabric (integración de Git del workspace oil-dev)
-  lh_bronze.Lakehouse/   landing (Files) y tablas de texto de bronze
+  lh_bronze.Lakehouse/   landing (Files) y tablas de texto de bronze (schema energia)
   lh_silver.Lakehouse/   silver (F3)
-  nb_bronze.Notebook/    landing → tablas Delta, cada archivo una sola vez
+  nb_bronze.Notebook/    landing → tablas Delta: cada archivo una vez, leído por su encabezado
 scripts/
   plataforma.py          workspaces oil-dev y oil-prod en la capacidad
   conectar_git.py        oil-dev ↔ main/fabric
@@ -44,7 +44,7 @@ scripts/
 $env:FABRIC_TENANT_ID = '<id del directorio>'
 .venv\Scripts\python scripts\subir_a_landing.py produccion <archivo.csv> [AAAA-MM-DD]
 .venv\Scripts\python scripts\correr.py nb_bronze
-.venv\Scripts\python scripts\contar_delta.py lh_bronze produccion
+.venv\Scripts\python scripts\contar_delta.py lh_bronze energia/produccion
 .venv\Scripts\python scripts\git_workspace.py status
 ```
 

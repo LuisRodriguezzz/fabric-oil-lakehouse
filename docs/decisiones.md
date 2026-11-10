@@ -131,7 +131,7 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
   trabajo de silver, igual que en Databricks.
 - **Por qué no Auto Loader:** es de Databricks; Fabric corre Spark abierto, y el stream de
   archivos con checkpoint es la versión de Spark de la misma idea.
-- El esquema sale de un contrato por fuente (D13), no de los archivos.
+- Cada archivo se lee con su propio encabezado y bronze acepta columnas nuevas (D15).
 - **En Azure:** Databricks con Auto Loader, o Synapse Spark con este mismo código.
 
 ### D11. Los notebooks son código en el repo; el workspace se actualiza desde Git
@@ -148,7 +148,11 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
 - `correr.py` corre un notebook o un pipeline y espera el resultado (API de Job Scheduler).
 - **En Azure:** `az datafactory pipeline create-run` o la API de ADF; en Databricks, la CLI.
 
-### D13. Bronze controla el encabezado de cada archivo contra un contrato
+### D13. Bronze controla el encabezado de cada archivo contra un contrato (reemplazada por la D15)
+
+La prueba de esta decisión sigue valiendo: asignar columnas por posición mezcla datos sin avisar.
+Lo que cambió es la respuesta: frenar bronze ante un archivo distinto no sirve, porque que la
+fuente sume columnas es un caso muy común.
 
 - **El problema:** cuando se le da el esquema a un lector de CSV, Spark por defecto
   (`enforceSchema=True`) ignora el encabezado y asigna las columnas **por posición**. Si la
@@ -200,3 +204,48 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
   schema. Hasta entonces `nb_bronze` no se corre: todavía escribe en `Tables/<fuente>`.
 - **En Azure:** en Databricks, los schemas de Unity Catalog (`catalogo.schema.tabla`, como en el
   proyecto de Databricks); en Synapse o Azure SQL, los schemas de SQL.
+
+### D15. Bronze acepta todo y lee cada archivo por su propio encabezado
+
+- **Por qué:** bronze guarda todo lo que llega; qué columnas valen lo decide silver con su
+  contrato (F3). El problema real de la D13 era asignar columnas por posición, y eso se resuelve
+  leyendo por nombre, sin frenar la carga.
+- **Cómo funciona:**
+  1. El stream de archivos (`binaryFile`, solo la ruta) descubre lo nuevo; el checkpoint recuerda
+     qué archivos ya procesó.
+  2. En cada tanda (`foreachBatch`) cada CSV se lee solo, con su encabezado. Leer varios juntos
+     no sirve: Spark toma el encabezado de uno y asigna el resto por posición.
+  3. `unionByName(allowMissingColumns=True)` junta los archivos de la tanda, y Delta con
+     `mergeSchema` suma las columnas nuevas. Todo entra como texto, con su linaje.
+  4. Cada escritura lleva `txnAppId` y `txnVersion` (el número de tanda): si una tanda se
+     reintenta, Delta no la escribe dos veces (verificado, Delta Lake: idempotent writes en
+     `foreachBatch`). El `txnAppId` vive dentro del checkpoint: si alguien lo borra para
+     reprocesar, las tandas vuelven a empezar en 0, y con el id viejo Delta las descartaría.
+- **Dónde quedan:** en el schema `energia`, el sistema de origen (el portal de la Secretaría de
+  Energía): `lh_bronze.energia.produccion` y `lh_bronze.energia.padron`.
+- **Probado** en el sandbox (10/11, notebook `prueba_d15` en `chevron-lab`, con el mismo
+  `nb_bronze`, archivos reales del proyecto de Databricks y dos sintéticos):
+
+  | Caso | Resultado |
+  |---|---|
+  | Padrón con BOM | Primera columna `idpozo`, ningún nombre con BOM o `\r`, 0 nulos en `idpozo` |
+  | Segunda corrida sin archivos nuevos | Sin cambios: mismas filas, una sola versión de Delta |
+  | Entrega real con la columna nueva `pozo_horizontal` | La tabla pasa de 42 a 43 columnas; las 45.943 filas nuevas tienen valor y las 45.943 anteriores quedan en `null` |
+  | `prod_pet` y `prod_gas` invertidas | `prod_pet = 200` y `prod_gas = 7`, como en el archivo |
+  | Sin la columna `observaciones` | `observaciones` en `null`, el resto en su lugar |
+  | Nombre con schema desde SQL | `` `chevron-lab`.lh_bronze.energia.produccion `` responde (91.888 filas) |
+
+- **En `oil-dev` (10/11):** 45.943 filas en `produccion` y 86.197 en `padron`; una segunda
+  corrida no cambió nada (una sola versión de Delta).
+- **Lo que costó:** un stream necesita el esquema por adelantado aunque solo lea rutas ("Schema
+  must be specified when creating a streaming source DataFrame"): se le da el esquema fijo de
+  `binaryFile`.
+- **No probado:** el reintento después de una falla a mitad de la escritura; se apoya en la
+  garantía de Delta.
+- **Casos borde abiertos:** un nombre de columna con caracteres que Delta no acepta (espacio,
+  coma, punto y coma, llaves, paréntesis, `=`) haría fallar la escritura; y con miles de archivos
+  por tanda, leer uno por uno sería lento (hoy llegan dos por mes).
+- **En Azure:** en Databricks, Auto Loader lo trae armado: con `addNewColumns` (el modo por
+  defecto) el stream se detiene al ver una columna nueva y, al reiniciar, la incluye; lo que no
+  encaja va a `_rescued_data`. En ADF, los Mapping Data Flows tienen *Allow schema drift*. En
+  Synapse Spark, este mismo código.
