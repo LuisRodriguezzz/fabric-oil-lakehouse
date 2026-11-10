@@ -12,36 +12,47 @@
 # MARKDOWN ********************
 
 # # Bronze: cada entrega de landing, tal como llegó, en una tabla Delta
-# - **Lee** `lh_bronze/Files/landing/<fuente>/ingest_date=AAAA-MM-DD/*.csv`.
-# - **Escribe** `lh_bronze/Tables/<fuente>`: todas las columnas como texto, más el linaje
-#   (`_archivo`, `ingest_date`, `_cargado_en`). Tipar y validar es trabajo de silver.
-# - **Contrato de columnas:** cada fuente declara su encabezado. Si un archivo llega con otras columnas u otro orden, la carga falla y nombra el archivo (`enforceSchema=False`), en vez de mezclar datos en silencio.
-# - **Cada archivo entra una sola vez:** Structured Streaming con un checkpoint y
-#   `trigger(availableNow=True)` procesa solo lo nuevo y termina. Volver a correrlo no duplica.
+# - **Lee** `lh_bronze/Files/landing/<fuente>/ingest_date=AAAA-MM-DD/<archivo>.csv`.
+# - **Escribe** `lh_bronze.energia.<fuente>` (`Tables/energia/<fuente>`): todas las columnas como
+#   texto, más el linaje (`_archivo`, `ingest_date`, `_cargado_en`). El schema `energia` es el
+#   sistema de origen: el portal de la Secretaría de Energía.
+# - **Acepta todo, sin mezclar columnas:** cada archivo se lee con su propio encabezado, así las
+#   columnas se asignan por nombre. Una columna nueva se suma a la tabla (las filas anteriores
+#   quedan en `null`); una que falta queda en `null`. Qué columnas valen lo decide silver (D15).
+# - **Cada archivo entra una sola vez:** un stream de archivos con checkpoint y
+#   `trigger(availableNow=True)` encuentra lo nuevo y termina. Cada escritura lleva el número de
+#   tanda, así un reintento no escribe dos veces.
 # - **Sirve en dev y en prod sin cambios:** arma las rutas con el nombre del workspace donde corre.
-# - **En Azure:** lo mismo se hace en Databricks con Auto Loader, o en Synapse Spark con este código.
+# - **En Azure:** en Databricks, Auto Loader con `addNewColumns`; en Synapse Spark, este código.
 
 # CELL ********************
 
-from pyspark.sql import functions as F
-from pyspark.sql.types import StringType, StructField, StructType
+import re
+import uuid
+from functools import reduce
 
-# El contrato de cada fuente: el encabezado que esperamos, columna por columna y en orden.
-# Cambiar un contrato es un commit revisado, no algo que pasa solo cuando cambia la fuente.
-CONTRATOS = {
-    "produccion": (
-        "idempresa,anio,mes,idpozo,prod_pet,prod_gas,prod_agua,iny_agua,iny_gas,iny_co2,iny_otro,"
-        "tef,vida_util,tipoextraccion,tipoestado,tipopozo,observaciones,fechaingreso,rectificado,"
-        "habilitado,idusuario,empresa,sigla,formprod,profundidad,formacion,idareapermisoconcesion,"
-        "areapermisoconcesion,idareayacimiento,areayacimiento,cuenca,provincia,tipo_de_recurso,"
-        "proyecto,clasificacion,subclasificacion,sub_tipo_recurso,fecha_data,id"
-    ).split(","),
-    "padron": "idpozo,anio,mes".split(","),
-}
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import BinaryType, LongType, StringType, StructField, StructType, TimestampType
+
+FUENTES = ("produccion", "padron")
+SCHEMA = "energia"
 
 # El workspace donde corre el notebook: oil-dev o oil-prod. Así no hay IDs fijos en el código.
 WORKSPACE = notebookutils.runtime.context["currentWorkspaceName"]  # noqa: F821
 BRONZE = f"abfss://{WORKSPACE}@onelake.dfs.fabric.microsoft.com/lh_bronze.Lakehouse"
+
+# Marca de orden de bytes que traen algunos CSV del portal pegada a la primera columna.
+BOM = "﻿"
+FECHA_DE_INGESTA = re.compile(r"/ingest_date=(\d{4}-\d{2}-\d{2})/")
+
+# Un stream necesita el esquema por adelantado; este es el fijo del lector binaryFile.
+ARCHIVOS = StructType([
+    StructField("path", StringType()),
+    StructField("modificationTime", TimestampType()),
+    StructField("length", LongType()),
+    StructField("content", BinaryType()),
+])
 
 print(f"Workspace: {WORKSPACE}")
 
@@ -54,39 +65,80 @@ print(f"Workspace: {WORKSPACE}")
 
 # CELL ********************
 
-def esquema(fuente: str) -> StructType:
-    """Las columnas del contrato, todas como texto, más ingest_date (sale de la carpeta)."""
-    return StructType(
-        [StructField(c, StringType()) for c in CONTRATOS[fuente]]
-        + [StructField("ingest_date", StringType())]
+def leer_archivo(ruta: str) -> DataFrame:
+    """Un CSV con su propio encabezado: columnas por nombre, todas como texto, más el linaje.
+
+    Leer varios CSV juntos no sirve: Spark toma el encabezado de uno y asigna el resto por
+    posición. Por eso cada archivo se lee solo.
+    """
+    datos = spark.read.option("header", True).csv(ruta)  # noqa: F821  (sin inferSchema: texto)
+    datos = datos.toDF(*[c.lstrip(BOM).strip() for c in datos.columns])
+    fecha = FECHA_DE_INGESTA.search(ruta)
+    return (
+        datos.withColumn("_archivo", F.lit(ruta))
+        .withColumn("ingest_date", F.lit(fecha.group(1) if fecha else None))
+        .withColumn("_cargado_en", F.current_timestamp())
     )
+
+
+def id_de_escritura(checkpoint: str, fuente: str) -> str:
+    """Identifica las escrituras de este checkpoint para que Delta descarte un reintento.
+
+    Vive dentro del checkpoint: si alguien lo borra para reprocesar todo, el id cambia y las
+    tandas, que vuelven a empezar en 0, no se confunden con las viejas.
+    """
+    marca = f"{checkpoint}/_id_escritura"
+    if not notebookutils.fs.exists(marca):  # noqa: F821
+        notebookutils.fs.put(marca, f"bronze_{fuente}_{uuid.uuid4()}", True)  # noqa: F821
+    return notebookutils.fs.head(marca, 200).strip()  # noqa: F821
+
+
+def escribir_tanda(fuente: str, destino: str, id_app: str):
+    def escribir(tanda: DataFrame, numero: int) -> None:
+        rutas = sorted(fila.path for fila in tanda.collect())
+        if not rutas:
+            return
+        datos = reduce(
+            lambda a, b: a.unionByName(b, allowMissingColumns=True),
+            [leer_archivo(ruta) for ruta in rutas],
+        )
+        (
+            datos.write.format("delta")
+            .mode("append")
+            .option("mergeSchema", True)  # una columna nueva se suma a la tabla
+            .option("txnAppId", id_app)  # si esta tanda ya se escribió, Delta no la repite
+            .option("txnVersion", numero)
+            .save(destino)
+        )
+        print(f"  tanda {numero}: {len(rutas)} archivo(s) -> {fuente}")
+
+    return escribir
 
 
 def ingerir(fuente: str) -> None:
     origen = f"{BRONZE}/Files/landing/{fuente}/"
-    destino = f"{BRONZE}/Tables/{fuente}"
+    destino = f"{BRONZE}/Tables/{SCHEMA}/{fuente}"
     checkpoint = f"{BRONZE}/Files/_checkpoints/bronze_{fuente}"
 
     consulta = (
-        spark.readStream.schema(esquema(fuente))  # noqa: F821
-        .option("header", True)
-        # Por defecto Spark ignora el encabezado y asigna las columnas por posición: si la fuente
-        # invierte dos columnas, las mezcla sin avisar. Así compara cada encabezado con el contrato.
-        .option("enforceSchema", False)
-        .csv(origen)
-        .withColumn("_archivo", F.input_file_name())
-        .withColumn("_cargado_en", F.current_timestamp())
-        .writeStream.format("delta")
+        # El stream solo descubre archivos nuevos: se pide la ruta, no el contenido.
+        spark.readStream.format("binaryFile")  # noqa: F821
+        .schema(ARCHIVOS)
+        .option("pathGlobFilter", "*.csv")
+        .option("recursiveFileLookup", True)
+        .load(origen)
+        .select("path")
+        .writeStream.foreachBatch(escribir_tanda(fuente, destino, id_de_escritura(checkpoint, fuente)))
         .option("checkpointLocation", checkpoint)
         .trigger(availableNow=True)
-        .start(destino)
+        .start()
     )
     consulta.awaitTermination()
-    filas = spark.read.format("delta").load(destino).count()  # noqa: F821
-    print(f"bronze.{fuente}: {filas} filas en total")
+    tabla = spark.read.format("delta").load(destino)  # noqa: F821
+    print(f"{SCHEMA}.{fuente}: {tabla.count()} filas, {len(tabla.columns)} columnas")
 
 
-for fuente in CONTRATOS:
+for fuente in FUENTES:
     ingerir(fuente)
 
 # METADATA ********************
