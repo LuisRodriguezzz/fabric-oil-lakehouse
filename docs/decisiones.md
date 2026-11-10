@@ -171,3 +171,32 @@ Azure"). Cada decisión dice cómo sería en Azure; el resumen está en el READM
 - **En Azure:** con Databricks, Auto Loader trae evolución de esquema y la columna
   `_rescued_data` para lo que no encaja; con Synapse Spark o este mismo código, el contrato y
   `enforceSchema=False` como acá.
+
+### D14. Lakehouses con schemas: se recrearon `lh_bronze` y `lh_silver`
+
+- **Qué es un schema en un lakehouse:** un nivel de nombres dentro de `Tables/`, como el schema de
+  SQL. La tabla queda en `Tables/<schema>/<tabla>` y se nombra `lh_bronze.dbo.produccion`.
+- **Por qué:** ordena las tablas por fuente o por tema, y las *materialized lake views* (el extra
+  después de la F5) los exigen (verificado, "Lakehouse schemas").
+- **Por qué recrear:** un lakehouse sin schemas no se convierte (verificado). En el portal vienen
+  activados; por la API, solo si se pide `"creationPayload": {"enableSchemas": true}`, y los
+  nuestros se habían creado sin eso.
+- **Cómo (10/11):**
+  1. Se compararon los dos CSV de landing con sus copias locales: SHA-256 idéntico, así que no
+     se perdía ninguna entrega.
+  2. Se borraron los dos lakehouses y se crearon de nuevo con la API.
+  3. Se devolvieron las entregas del 9/11 a landing con `subir_a_landing.py`.
+  4. Commit desde el workspace (`d8ca117`).
+- **En Git:** la marca es `lakehouse.metadata.json` = `{"defaultSchema":"dbo"}`.
+- **Lo que costó:**
+  - El nombre de un item borrado no queda libre al instante (`ItemDisplayNameNotAvailableYet`), y
+    el SQL endpoint de `lh_silver` falló tres veces antes de crearse: se reintenta cada 30
+    segundos.
+  - Como el commit tenía el item viejo borrado y el nuevo con el mismo nombre, Fabric guardó las
+    carpetas con el GUID. Se renombraron en el repo (`ca86abf`) y el workspace se actualizó sin
+    cambios: Fabric reconoce cada item por el `logicalId` de su `.platform`, no por la carpeta
+    (probado).
+- **Pendiente:** las tablas de bronze se reconstruyen con el `nb_bronze` nuevo (D15), ya con
+  schema. Hasta entonces `nb_bronze` no se corre: todavía escribe en `Tables/<fuente>`.
+- **En Azure:** en Databricks, los schemas de Unity Catalog (`catalogo.schema.tabla`, como en el
+  proyecto de Databricks); en Synapse o Azure SQL, los schemas de SQL.
