@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "nb_silver",
+    "description": "Silver: última entrega tipada y validada contra el contrato, con cuarentena y control."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "e01461bb-6f6d-a0eb-43a4-763c058cb236"
+  }
+}
