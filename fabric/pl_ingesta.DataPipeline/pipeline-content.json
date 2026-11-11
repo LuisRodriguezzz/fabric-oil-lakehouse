@@ -32,8 +32,8 @@
           "firstRowOnly": false
         },
         "policy": {
-          "timeout": "0.12:00:00",
-          "retry": 0,
+          "timeout": "0.00:10:00",
+          "retry": 1,
           "retryIntervalInSeconds": 30,
           "secureInput": false,
           "secureOutput": false
@@ -54,16 +54,19 @@
               "type": "WebActivity",
               "typeProperties": {
                 "method": "GET",
-                "relativeUrl": "@concat('resource_show?id=', item().recurso_ckan)",
+                "relativeUrl": {
+                  "value": "@concat('resource_show?id=', item().recurso_ckan)",
+                  "type": "Expression"
+                },
                 "headers": {}
               },
               "externalReferences": {
                 "connection": "d022c9b8-ce73-4a55-a795-aa38cad02256"
               },
               "policy": {
-                "timeout": "0.12:00:00",
-                "retry": 0,
-                "retryIntervalInSeconds": 30,
+                "timeout": "0.00:05:00",
+                "retry": 2,
+                "retryIntervalInSeconds": 60,
                 "secureInput": false,
                 "secureOutput": false
               },
@@ -95,7 +98,10 @@
                           "typeProperties": {
                             "location": {
                               "type": "HttpServerLocation",
-                              "relativeUrl": "@replace(activity('Version').output.result.url, 'http://datos.energia.gob.ar', '')"
+                              "relativeUrl": {
+                                "value": "@replace(activity('Version').output.result.url, 'http://datos.energia.gob.ar', '')",
+                                "type": "Expression"
+                              }
                             }
                           },
                           "externalReferences": {
@@ -114,8 +120,14 @@
                           "typeProperties": {
                             "location": {
                               "type": "LakehouseLocation",
-                              "folderPath": "@concat('landing/', item().fuente, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'))",
-                              "fileName": "@concat(item().fuente, '_', formatDateTime(activity('Version').output.result.last_modified, 'yyyyMMddTHHmmss'), '_', string(activity('Version').output.result.size), '.csv')"
+                              "folderPath": {
+                                "value": "@concat('landing/', item().fuente, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'))",
+                                "type": "Expression"
+                              },
+                              "fileName": {
+                                "value": "@concat(item().fuente, '_', formatDateTime(activity('Version').output.result.last_modified, 'yyyyMMddTHHmmss'), '_', string(activity('Version').output.result.size), '.csv')",
+                                "type": "Expression"
+                              }
                             }
                           },
                           "linkedService": {
@@ -136,9 +148,9 @@
                       "enableStaging": false
                     },
                     "policy": {
-                      "timeout": "0.12:00:00",
-                      "retry": 0,
-                      "retryIntervalInSeconds": 30,
+                      "timeout": "0.00:30:00",
+                      "retry": 2,
+                      "retryIntervalInSeconds": 60,
                       "secureInput": false,
                       "secureOutput": false
                     },
@@ -151,23 +163,38 @@
                       "storedProcedureName": "[control].[registrar_version]",
                       "storedProcedureParameters": {
                         "archivo": {
-                          "value": "@concat('landing/', item().fuente, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'), '/', item().fuente, '_', formatDateTime(activity('Version').output.result.last_modified, 'yyyyMMddTHHmmss'), '_', string(activity('Version').output.result.size), '.csv')",
+                          "value": {
+                            "value": "@concat('landing/', item().fuente, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'), '/', item().fuente, '_', formatDateTime(activity('Version').output.result.last_modified, 'yyyyMMddTHHmmss'), '_', string(activity('Version').output.result.size), '.csv')",
+                            "type": "Expression"
+                          },
                           "type": "String"
                         },
                         "corrida": {
-                          "value": "@pipeline().RunId",
+                          "value": {
+                            "value": "@pipeline().RunId",
+                            "type": "Expression"
+                          },
                           "type": "String"
                         },
                         "fuente": {
-                          "value": "@item().fuente",
+                          "value": {
+                            "value": "@item().fuente",
+                            "type": "Expression"
+                          },
                           "type": "String"
                         },
                         "tamano_bytes": {
-                          "value": "@activity('Version').output.result.size",
+                          "value": {
+                            "value": "@activity('Version').output.result.size",
+                            "type": "Expression"
+                          },
                           "type": "Int64"
                         },
                         "version": {
-                          "value": "@activity('Version').output.result.last_modified",
+                          "value": {
+                            "value": "@activity('Version').output.result.last_modified",
+                            "type": "Expression"
+                          },
                           "type": "String"
                         }
                       }
@@ -187,8 +214,8 @@
                       }
                     },
                     "policy": {
-                      "timeout": "0.12:00:00",
-                      "retry": 0,
+                      "timeout": "0.00:10:00",
+                      "retry": 1,
                       "retryIntervalInSeconds": 30,
                       "secureInput": false,
                       "secureOutput": false
@@ -233,12 +260,13 @@
         "type": "TridentNotebook",
         "typeProperties": {
           "notebookId": "9c89e3fe-d25c-4f01-ad0d-4676a52c1c3e",
-          "workspaceId": "00000000-0000-0000-0000-000000000000"
+          "workspaceId": "00000000-0000-0000-0000-000000000000",
+          "sessionTag": "ingesta"
         },
         "policy": {
-          "timeout": "0.12:00:00",
-          "retry": 0,
-          "retryIntervalInSeconds": 30,
+          "timeout": "0.00:30:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 60,
           "secureInput": false,
           "secureOutput": false
         },
@@ -256,12 +284,13 @@
         "type": "TridentNotebook",
         "typeProperties": {
           "notebookId": "e01461bb-6f6d-a0eb-43a4-763c058cb236",
-          "workspaceId": "00000000-0000-0000-0000-000000000000"
+          "workspaceId": "00000000-0000-0000-0000-000000000000",
+          "sessionTag": "ingesta"
         },
         "policy": {
-          "timeout": "0.12:00:00",
-          "retry": 0,
-          "retryIntervalInSeconds": 30,
+          "timeout": "0.00:30:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 120,
           "secureInput": false,
           "secureOutput": false
         },
@@ -269,6 +298,60 @@
         "dependsOn": [
           {
             "activity": "Bronze",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "RefreshSqlEndpoint",
+        "typeProperties": {
+          "workspaceId": "00000000-0000-0000-0000-000000000000",
+          "sqlEndpointId": "bb83ffa3-f173-4451-bb9c-ab3065b2cc44",
+          "recreateTables": false
+        },
+        "externalReferences": {
+          "connection": "c9d01b95-b8da-48e4-aa18-3bb9da34abc1"
+        },
+        "policy": {
+          "timeout": "0.00:15:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "RefrescarBronze",
+        "dependsOn": [
+          {
+            "activity": "Silver",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "RefreshSqlEndpoint",
+        "typeProperties": {
+          "workspaceId": "00000000-0000-0000-0000-000000000000",
+          "sqlEndpointId": "d6fce898-719a-4828-9256-9835e71374b7",
+          "recreateTables": false
+        },
+        "externalReferences": {
+          "connection": "c9d01b95-b8da-48e4-aa18-3bb9da34abc1"
+        },
+        "policy": {
+          "timeout": "0.00:15:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "RefrescarSilver",
+        "dependsOn": [
+          {
+            "activity": "RefrescarBronze",
             "dependencyConditions": [
               "Succeeded"
             ]
