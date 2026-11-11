@@ -249,3 +249,86 @@ fuente sume columnas es un caso muy común.
   defecto) el stream se detiene al ver una columna nueva y, al reiniciar, la incluye; lo que no
   encaja va a `_rescued_data`. En ADF, los Mapping Data Flows tienen *Allow schema drift*. En
   Synapse Spark, este mismo código.
+
+## Ingesta con Data Factory (F2)
+
+### D16. `pl_ingesta`: watermark con una tabla de control en una SQL database
+
+- **El problema:** el portal publica cada CSV siempre en la misma URL y lo reemplaza cuando
+  corrige. Hay que darse cuenta del cambio y bajar la versión nueva sin perder la anterior.
+- **La versión de una fuente** es el `last_modified` que informa la API CKAN (`resource_show`)
+  más el tamaño (`size`). Si cambia cualquiera de los dos, es una versión nueva. Se compara por
+  igualdad, como texto, nunca por orden: es la misma regla del manifiesto del proyecto de AWS.
+  El tamaño cubre el caso de un contenido que cambia sin cambiar la fecha.
+- **La tabla de control** vive en la SQL database `sqldb_control` (schema `control`):
+  `fuente` (qué revisar: una fila por recurso de CKAN), `version_cargada` (qué se bajó, con
+  archivo y corrida), la vista `fuente_a_revisar` (la última versión por fuente) y el stored
+  procedure `registrar_version` (anota sin duplicar). Sumar una fuente es agregar una fila:
+  pipeline guiado por metadatos.
+- **La base es código:** Fabric la guarda en Git como proyecto `.sqlproj`; los objetos se
+  escribieron como `.sql` y se aplicaron desde Git (Fabric compila un dacpac y publica solo las
+  diferencias). Las filas de `control.fuente` no van en el proyecto: se cargaron a mano.
+- **El pipeline** (armado en el lienzo):
+  1. `Fuentes` (Lookup) lee `control.fuente_a_revisar`.
+  2. `PorFuente` (ForEach, secuencial) recorre las filas.
+  3. `Version` (Web) consulta `resource_show?id=<recurso>`.
+  4. `CambioVersion` (If): `@or(not(equals(item().ultima_version, …last_modified)),
+     not(equals(item().ultimo_tamano, …size)))`.
+  5. Si cambió: `BajarCSV` (Copy binaria del portal a landing) y después `RegistrarVersion`
+     (stored procedure). Primero se copia y después se anota: si la copia falla, la versión no
+     queda anotada y la próxima corrida la vuelve a bajar.
+  6. `Bronze` (Notebook `nb_bronze`), una vez, al terminar el ForEach.
+- **Verificado (10/11):**
+  - Primera corrida: padrón 1.172.135 bytes y producción 148.923.474 bytes; leídos = escritos =
+    tamaño de CKAN.
+  - Segunda corrida: `CambioVersion` dio falso en las dos fuentes y no se bajó nada.
+  - Bronze sumó solo los archivos nuevos: `energia.produccion` pasó a 477.265 filas y
+    `energia.padron` a 172.583.
+- **Observado:** el monitor muestra `last_modified` con una "Z" final, pero lo que se guarda y se
+  compara no la tiene (en `version_cargada` quedó `2026-11-10T09:02:43.691128`). Funciona porque
+  siempre se compara lo que leyó el pipeline con lo que anotó el pipeline; nunca hay que comparar
+  versiones leídas por dos herramientas distintas.
+- **Casos borde abiertos:**
+  - Si el stored procedure falla después de la Copy y el reintento es otro día, la misma versión
+    se baja a otra carpeta de fecha y bronze la tiene dos veces. Silver se queda con una versión
+    por pozo y mes, así que no cambia el resultado.
+  - Las conexiones no van a Git: el pipeline las nombra por su ID. Para prod hay que cambiarlas
+    (F8).
+- **En Azure:** es el tutorial de carga incremental de ADF (tabla de watermark en Azure SQL,
+  Lookup, Copy y Stored procedure). Diferencias:
+  - La conexión de Fabric equivale al linked service.
+  - En ADF la Copy usa datasets.
+  - Las conexiones de Fabric viven fuera del workspace; los linked services, dentro del factory
+    y en Git.
+
+### D17. En landing, la carpeta es el día de descarga y el nombre es la versión
+
+- Ruta: `landing/<fuente>/ingest_date=<AAAA-MM-DD>/<fuente>_<AAAAMMDDTHHMMSS>_<bytes>.csv`.
+  Ejemplo: `padron/ingest_date=2026-11-11/padron_20261110T090243_1172135.csv`.
+- **Por qué:** la carpeta dice cuándo lo bajamos; el nombre, qué versión es. Una corrección
+  entra como archivo nuevo, al lado del anterior, y nada se pisa (D9). Pisar sería peor que
+  perder historia: bronze recuerda los archivos por su ruta y no vería la corrección.
+- **La fecha de ingesta va en UTC** (`pipeline().TriggerTime`): una corrida de las 21:15 de
+  Argentina quedó en `ingest_date=2026-11-11`. Todas las fuentes de una corrida quedan con la
+  misma fecha, y no depende de dónde ni a qué hora corre.
+- **En Azure:** igual, con la expresión en el dataset de destino de la Copy.
+
+### D18. El portal no acepta conexiones desde Azure: gateway en la compu
+
+- **Lo que pasó:** la primera corrida falló en `Version` con "Request didn't reach the server".
+- **La prueba** (notebook `prueba_red` en el sandbox, desde Spark de Fabric, IP pública
+  `20.206.89.10`): el nombre del portal resuelve (`168.101.26.134`), pero las conexiones a los
+  puertos 80 y 443 se cortan a los 15 s; `learn.microsoft.com` responde en 0,3 s. Desde una red
+  de Argentina el portal responde. La causa exacta (filtro de IPs del portal) es una deducción.
+- **La decisión:** un *on-premises data gateway* en la compu de Luis. El gateway sale hacia
+  Azure y toma el trabajo: no hay que abrir puertos de entrada. La Web y la Copy usan conexiones
+  "a través del gateway" (`oil-portal-energia-api-gw`, `oil-portal-energia-http-gw`); el Lookup,
+  el stored procedure y el notebook siguen en la nube.
+- **Lo que costó:** se registró primero en Brazil South, la región de la capacidad. El instalador
+  avisó "Microsoft Fabric · No disponible fuera del entorno predeterminado" y la API
+  `/gateways` vino vacía. Registrado en la región por defecto del tenant (South Central US),
+  Fabric lo ve y la capacidad de Brazil South lo usa.
+- **Costo aceptado:** la compu tiene que estar prendida cuando corre el pipeline. En producción
+  va en una máquina siempre prendida, con dos o más nodos en clúster.
+- **En Azure:** el *Self-hosted Integration Runtime*. El linked service HTTP lo usa con
+  `connectVia`; es lo que se usa para traer datos de dentro de la red de la empresa.
