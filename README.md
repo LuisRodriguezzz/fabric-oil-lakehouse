@@ -24,13 +24,15 @@ Las decisiones, con su porqué y su equivalente en Azure, están en
 ## Estructura
 
 ```
-docs/decisiones.md   decisiones numeradas (D1 a D18), cada una con su equivalente en Azure
+docs/decisiones.md   decisiones numeradas (D1 a D19), cada una con su equivalente en Azure
 fabric/              items de Fabric (integración de Git del workspace oil-dev)
   lh_bronze.Lakehouse/   landing (Files) y tablas de texto de bronze (schema energia)
   lh_silver.Lakehouse/   silver (F3)
   nb_bronze.Notebook/    landing → tablas Delta: cada archivo una vez, leído por su encabezado
+  nb_silver.Notebook/    bronze → silver: contrato, cuarentena y control de calidad (F3)
   pl_ingesta.DataPipeline/   portal → landing con watermark, y después nb_bronze (F2)
   sqldb_control.SQLDatabase/ fuentes y versiones cargadas, como proyecto SQL (F2)
+tests/               pytest de silver; los corre GitHub Actions (.github/workflows/pruebas.yml)
 scripts/
   plataforma.py          workspaces oil-dev y oil-prod en la capacidad
   conectar_git.py        oil-dev ↔ main/fabric

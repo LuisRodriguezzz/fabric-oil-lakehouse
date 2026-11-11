@@ -1,0 +1,25 @@
+# CI: corre los tests de silver en cada push a main y en cada pull request.
+# Es la misma idea que un pipeline de Azure DevOps: una máquina de GitHub con Java y Python
+# instala PySpark y corre pytest. Si un test falla, el commit queda marcado en rojo.
+name: pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Spark 4 necesita Java 17 o más nuevo.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q

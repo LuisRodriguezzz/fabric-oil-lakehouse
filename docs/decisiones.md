@@ -332,3 +332,54 @@ fuente sume columnas es un caso muy común.
   va en una máquina siempre prendida, con dos o más nodos en clúster.
 - **En Azure:** el *Self-hosted Integration Runtime*. El linked service HTTP lo usa con
   `connectVia`; es lo que se usa para traer datos de dentro de la red de la empresa.
+
+## Silver (F3)
+
+### D19. Silver: la última entrega, tipada y validada contra un contrato, con cuarentena
+
+- **Qué hace `nb_silver`:** por cada fuente lee `lh_bronze.energia.<fuente>` y escribe
+  `lh_silver.energia.<fuente>` (vigente), `<fuente>_cuarentena` y una fila en
+  `control_calidad`. Es el diseño del proyecto de Databricks llevado a Fabric:
+  1. **La última entrega manda.** Cada archivo del portal es una foto completa de la fuente:
+     gana el de carpeta más nueva (y, el mismo día, el de nombre mayor).
+  2. **Tipos con `try_cast`.** Lo que no convierte no rompe la carga: queda anotado en
+     `_no_convierte` y el texto original en `_original`. Una columna del contrato que no vino
+     queda nula y las reglas deciden.
+  3. **Una versión por clave.** En producción gana la `fechaingreso` más nueva (la
+     rectificativa); dos versiones distintas con la misma fecha van a cuarentena.
+  4. **Reglas del contrato** como condiciones SQL; si una da falso o nulo, el nombre de la regla
+     queda en `_motivos` y la fila va a cuarentena.
+- **Control antes de publicar:** si una fuente no tiene filas vigentes o su cuarentena supera el
+  umbral (1 %), la tabla vigente de esa fuente no se toca y el notebook falla al final: el
+  pipeline se corta y lo que sigue queda con la última versión buena. La cuarentena se escribe
+  igual, porque es lo que alguien tiene que mirar para entender la falla (cada fila trae su
+  `_archivo`). Cada corrida suma su fila a `control_calidad`, con los motivos y las columnas que
+  el contrato no conoce.
+- **Qué se hace con la cuarentena y con una corrida que falla:**
+  - Si el error es de la fuente (un valor negativo), se le avisa al proveedor. Cuando llega la
+    entrega corregida, la fila sale sola de la cuarentena, porque silver se recalcula.
+  - Si el error es del contrato (un valor válido que no previmos), se cambia la regla con un
+    commit revisado y se vuelve a correr silver: bronze guarda todo, no hace falta volver a
+    bajar nada.
+  - Si una corrección es regla de negocio (por ejemplo, tratar −0,001 como 0), se escribe como
+    transformación explícita en el contrato, nunca a mano sobre la tabla.
+  - Si hay que volver atrás, Delta tiene `RESTORE TABLE … TO VERSION AS OF n`.
+- **Se reescribe entera en cada corrida** (`overwrite`): silver es la foto de la última entrega
+  y son menos de medio millón de filas. Delta guarda las versiones anteriores (time travel).
+- **Un archivo Parquet por millón de filas:** la primera corrida dejó 431 mil filas en 200
+  archivos (las 200 particiones por defecto de Spark después de las ventanas). Ahora se
+  reparte antes de escribir: un archivo por tabla.
+- **Las funciones se prueban con pytest** (`tests/test_silver.py`, 16 tests). El notebook es un
+  `.py` válido: los tests lo importan y el bloque que escribe solo corre dentro de Fabric
+  (`if __name__ == "__main__"`). Corrieron dentro del Spark de Fabric en el sandbox (Spark 4.1.1,
+  Python 3.13): 16 pasaron. En GitHub los corre `.github/workflows/pruebas.yml`.
+- **Resultado en `oil-dev` (10/11):**
+  - `produccion`: 431.319 vigentes y 3 en cuarentena (0,0007 %), todas por
+    `produccion_no_negativa`: gas de −12,267 y −7,519 en dos pozos de Pluspetrol (mayo de
+    2020) y petróleo de −0,001 en uno de Petrobras (diciembre de 2008).
+  - `padron`: 86.386 vigentes, ninguna en cuarentena.
+  - El archivo completo de producción trae `coordenadax` y `coordenaday`, que el contrato no
+    conoce: el control las informa y silver no las usa hasta decidir.
+- **En Azure:** en Databricks son materialized views con *expectations* (el proyecto de
+  Databricks); en Synapse Spark, este mismo notebook. En ADF, los Mapping Data Flows también
+  pueden separar filas buenas y malas, sin código.
