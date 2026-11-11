@@ -1,0 +1,257 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "type": "Lookup",
+        "typeProperties": {
+          "source": {
+            "type": "FabricSqlDatabaseSource",
+            "sqlReaderQuery": "SELECT fuente, recurso_ckan, ultima_version, ultimo_tamano FROM control.fuente_a_revisar;",
+            "partitionOption": "None",
+            "queryTimeout": "02:00:00"
+          },
+          "datasetSettings": {
+            "type": "FabricSqlDatabaseTable",
+            "schema": [],
+            "connectionSettings": {
+              "name": "sqldb_control",
+              "properties": {
+                "type": "FabricSqlDatabase",
+                "typeProperties": {
+                  "artifactId": "75182275-7221-b2e2-4f5a-dfd933d8d746",
+                  "workspaceId": "00000000-0000-0000-0000-000000000000"
+                },
+                "externalReferences": {
+                  "connection": "76c6a138-50f9-412d-92d6-11d10f57391a"
+                },
+                "annotations": []
+              }
+            },
+            "annotations": []
+          },
+          "firstRowOnly": false
+        },
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Fuentes",
+        "dependsOn": []
+      },
+      {
+        "type": "ForEach",
+        "typeProperties": {
+          "isSequential": true,
+          "items": {
+            "value": "@activity('Fuentes').output.value",
+            "type": "Expression"
+          },
+          "activities": [
+            {
+              "type": "WebActivity",
+              "typeProperties": {
+                "method": "GET",
+                "relativeUrl": "@concat('resource_show?id=', item().recurso_ckan)",
+                "headers": {}
+              },
+              "externalReferences": {
+                "connection": "d022c9b8-ce73-4a55-a795-aa38cad02256"
+              },
+              "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 30,
+                "secureInput": false,
+                "secureOutput": false
+              },
+              "name": "Version",
+              "dependsOn": []
+            },
+            {
+              "type": "IfCondition",
+              "typeProperties": {
+                "expression": {
+                  "value": "@or(not(equals(item().ultima_version, activity('Version').output.result.last_modified)), not(equals(item().ultimo_tamano, activity('Version').output.result.size)))",
+                  "type": "Expression"
+                },
+                "ifTrueActivities": [
+                  {
+                    "type": "Copy",
+                    "typeProperties": {
+                      "source": {
+                        "type": "BinarySource",
+                        "formatSettings": {
+                          "type": "BinaryReadSettings"
+                        },
+                        "storeSettings": {
+                          "type": "HttpReadSettings",
+                          "requestMethod": "GET"
+                        },
+                        "datasetSettings": {
+                          "type": "Binary",
+                          "typeProperties": {
+                            "location": {
+                              "type": "HttpServerLocation",
+                              "relativeUrl": "@replace(activity('Version').output.result.url, 'http://datos.energia.gob.ar', '')"
+                            }
+                          },
+                          "externalReferences": {
+                            "connection": "05cd0303-8717-4129-bc6e-b6c62ff4aa2d"
+                          },
+                          "annotations": []
+                        }
+                      },
+                      "sink": {
+                        "type": "BinarySink",
+                        "storeSettings": {
+                          "type": "LakehouseWriteSettings"
+                        },
+                        "datasetSettings": {
+                          "type": "Binary",
+                          "typeProperties": {
+                            "location": {
+                              "type": "LakehouseLocation",
+                              "folderPath": "@concat('landing/', item().fuente, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'))",
+                              "fileName": "@concat(item().fuente, '_', formatDateTime(activity('Version').output.result.last_modified, 'yyyyMMddTHHmmss'), '_', string(activity('Version').output.result.size), '.csv')"
+                            }
+                          },
+                          "linkedService": {
+                            "name": "lh_bronze",
+                            "properties": {
+                              "type": "Lakehouse",
+                              "typeProperties": {
+                                "artifactId": "95cae989-328a-b078-4a4a-3f422664d5e8",
+                                "workspaceId": "00000000-0000-0000-0000-000000000000",
+                                "rootFolder": "Files"
+                              },
+                              "annotations": []
+                            }
+                          },
+                          "annotations": []
+                        }
+                      },
+                      "enableStaging": false
+                    },
+                    "policy": {
+                      "timeout": "0.12:00:00",
+                      "retry": 0,
+                      "retryIntervalInSeconds": 30,
+                      "secureInput": false,
+                      "secureOutput": false
+                    },
+                    "name": "BajarCSV",
+                    "dependsOn": []
+                  },
+                  {
+                    "type": "SqlServerStoredProcedure",
+                    "typeProperties": {
+                      "storedProcedureName": "[control].[registrar_version]",
+                      "storedProcedureParameters": {
+                        "archivo": {
+                          "value": "@concat('landing/', item().fuente, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'), '/', item().fuente, '_', formatDateTime(activity('Version').output.result.last_modified, 'yyyyMMddTHHmmss'), '_', string(activity('Version').output.result.size), '.csv')",
+                          "type": "String"
+                        },
+                        "corrida": {
+                          "value": "@pipeline().RunId",
+                          "type": "String"
+                        },
+                        "fuente": {
+                          "value": "@item().fuente",
+                          "type": "String"
+                        },
+                        "tamano_bytes": {
+                          "value": "@activity('Version').output.result.size",
+                          "type": "Int64"
+                        },
+                        "version": {
+                          "value": "@activity('Version').output.result.last_modified",
+                          "type": "String"
+                        }
+                      }
+                    },
+                    "connectionSettings": {
+                      "name": "sqldb_control",
+                      "properties": {
+                        "type": "FabricSqlDatabase",
+                        "typeProperties": {
+                          "artifactId": "75182275-7221-b2e2-4f5a-dfd933d8d746",
+                          "workspaceId": "00000000-0000-0000-0000-000000000000"
+                        },
+                        "externalReferences": {
+                          "connection": "76c6a138-50f9-412d-92d6-11d10f57391a"
+                        },
+                        "annotations": []
+                      }
+                    },
+                    "policy": {
+                      "timeout": "0.12:00:00",
+                      "retry": 0,
+                      "retryIntervalInSeconds": 30,
+                      "secureInput": false,
+                      "secureOutput": false
+                    },
+                    "name": "RegistrarVersion",
+                    "dependsOn": [
+                      {
+                        "activity": "BajarCSV",
+                        "dependencyConditions": [
+                          "Succeeded"
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "ifFalseActivities": []
+              },
+              "name": "CambioVersion",
+              "description": "@or(not(equals(item().ultima_version, activity('Version').output.result.last_modified)), not(equals(item().ultimo_tamano, activity('Version').output.result.size)))",
+              "dependsOn": [
+                {
+                  "activity": "Version",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "name": "PorFuente",
+        "dependsOn": [
+          {
+            "activity": "Fuentes",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "TridentNotebook",
+        "typeProperties": {
+          "notebookId": "9c89e3fe-d25c-4f01-ad0d-4676a52c1c3e",
+          "workspaceId": "00000000-0000-0000-0000-000000000000"
+        },
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "Bronze",
+        "dependsOn": [
+          {
+            "activity": "PorFuente",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
