@@ -383,3 +383,165 @@ fuente sume columnas es un caso muy común.
 - **En Azure:** en Databricks son materialized views con *expectations* (el proyecto de
   Databricks); en Synapse Spark, este mismo notebook. En ADF, los Mapping Data Flows también
   pueden separar filas buenas y malas, sin código.
+
+## CI/CD (F8)
+
+### D20. A prod se despliega desde el repo con `fabric-cicd`; Azure DevOps y GitHub Actions quedan escritos
+
+- **Qué hace:** `scripts/desplegar.py PROD` publica en `oil-prod` lo que está en `fabric/`
+  (Lakehouse, SQLDatabase, Notebook y DataPipeline) con `fabric-cicd` 1.4, la librería de
+  Microsoft, y borra lo que esté en prod y ya no esté en el repo. Toma el repo, no `oil-dev`:
+  Git manda (D11).
+- **Referencias entre items:** en Git, el pipeline nombra a sus notebooks, al lakehouse y a la SQL
+  database por su `logicalId`, con `workspaceId` en ceros ("el mismo workspace"). Son portables:
+  se resuelven en el workspace de destino.
+- **Conexiones:** viven en el tenant, no se despliegan y el pipeline las nombra por GUID.
+  `fabric/parameter.yml` lista las tres y su valor por ambiente. En el laboratorio prod usa las
+  mismas (misma fuente, mismo gateway); en una empresa tendría las suyas.
+- **Identidad:** en la compu, tu usuario. En CI/CD, un service principal que entra sin contraseña
+  (*workload identity federation* u OIDC). Ese service principal tiene que ser Contributor de
+  `oil-prod`, y además hay que prender el switch de tenant "Service principals can use Fabric
+  APIs".
+- **Escrito, sin correr:**
+  - `azure-pipelines.yml`, para Azure DevOps (pide suscripción, D4): etapa de tests, y etapa de
+    prod con environment y aprobación.
+  - `.github/workflows/desplegar.yml`: el mismo circuito en GitHub. Falta crear el service
+    principal, y la cuenta de GitHub está bloqueada por facturación.
+- **Primer despliegue (11/11), con el deployment pipeline `dp-oil`** (interfaz de Fabric, etapas
+  Development = `oil-dev` y Production = `oil-prod`), seis items, `df_prueba` afuera:
+  - Llegaron los seis, más los tres SQL endpoints que Fabric crea solo.
+  - El `pl_ingesta` de prod apunta a los items **de prod** (notebooks, `lh_bronze` y
+    `sqldb_control`) y al workspace `oil-prod`: el *auto-binding*, verificado leyendo su
+    definición por la API.
+  - `sqldb_control` de prod llegó con el esquema completo: el dacpac de prod tiene las 2 tablas,
+    la vista, el stored procedure y las restricciones. Los datos no viajan: `control.fuente` de
+    prod está vacía y los lakehouses de prod, sin datos.
+  - `oil-prod` no está conectado a Git, igual que el ADF de prod: solo recibe despliegues.
+- **Pendiente:** correr `scripts/desplegar.py` (el despliegue por código). El sistema lo frenó como
+  "despliegue a producción" y necesita el OK explícito de Luis.
+- **En Azure:** es el release de Azure DevOps que despliega el ARM template de ADF con una
+  service connection y aprobación. Para Fabric desde Azure DevOps sería este mismo script.
+
+## Operación (F7)
+
+### D21. Los notebooks del pipeline comparten una sesión de Spark (alta concurrencia)
+
+- **Qué es:** con el modo de alta concurrencia para pipelines, las actividades Notebook de un
+  pipeline que llevan el mismo `sessionTag` (`ingesta`) corren en la misma sesión de Spark. La
+  sesión arranca una vez y se factura solo la actividad que la inicia (verificado, [High
+  concurrency in pipelines](https://learn.microsoft.com/en-us/fabric/data-engineering/configure-high-concurrency-session-notebooks-in-pipelines)
+  y [High concurrency overview](https://learn.microsoft.com/en-us/fabric/data-engineering/high-concurrency-overview)).
+- **Por qué:** `nb_bronze` y `nb_silver` corren seguidos. Con una sesión cada uno, la capacidad
+  (4 CU) recibe dos pedidos de Spark por corrida, y ya devolvió errores 430.
+- **Condiciones para compartir** (verificado): el mismo usuario, el mismo lakehouse por defecto (o
+  ninguno: los dos notebooks no tienen), la misma configuración de Spark y las mismas librerías.
+  Hasta 5 notebooks por sesión.
+- **Es un ajuste del workspace, no un item:** el despliegue lleva items, no ajustes. `oil-dev` lo
+  tenía y `oil-prod` no. Se prendió a mano en el portal el 12/11 (Workspace settings > Data
+  Engineering/Science > Spark settings > High concurrency > "For pipeline running multiple
+  notebooks") y se verificó por la API: `GET /workspaces/{id}/spark/settings` devuelve
+  `highConcurrency.notebookPipelineRunEnabled = true`.
+- **También como código:** `plataforma.py` lo revisa en cada workspace y lo prende si está apagado
+  (D6). Se probó en dev, donde no cambió nada; el camino que lo prende no se probó, porque prod se
+  prendió a mano.
+- **Probado en dev:** en la corrida del 11/11 a las 19:33 UTC, `nb_bronze` y `nb_silver` tienen el
+  mismo `livyId` con `isHighConcurrency: true` (API `notebooks/{id}/livySessions`). Antes, cada uno
+  tenía su propia sesión. En prod se comprueba en la primera corrida.
+- **Alternativa descartada:** sacar el `sessionTag` y dejar una sesión por notebook, con dos
+  arranques y dos pedidos a la capacidad por corrida.
+- **En Azure:** no encontré en la doc oficial de Synapse un ajuste equivalente para compartir la
+  sesión entre las actividades Notebook de un pipeline.
+
+### D22. El SQL endpoint no se refresca desde el pipeline (por ahora)
+
+- **Qué pasó:** F7 había sumado dos actividades "Refresh SQL endpoint" con el `workspaceId` y el
+  `sqlEndpointId` de dev. Al desplegar con `dp-oil` (12/11), el *auto-binding* reasignó las
+  actividades Notebook a los notebooks de prod, pero esas dos siguieron apuntando a dev
+  (probado leyendo la definición por la API). Para pipelines no hay deployment rules (verificado,
+  [create-rules](https://learn.microsoft.com/en-us/fabric/cicd/deployment-pipelines/create-rules)).
+- **Primer arreglo:** `nb_refrescar_sql`, que refresca con semantic link
+  (`refresh_sql_endpoint_metadata(warehouse="lh_silver", warehouse_type="Lakehouse")`) y resuelve
+  el endpoint por el nombre del lakehouse en el workspace donde corre: sin IDs (D11). Anduvo en
+  dev y en prod.
+- **Lo que mostró prod (13/11):** en la primera corrida falló dos veces y anduvo a la tercera:
+  1. `energia.produccion_cuarentena` devolvió el error 2714, *"There is already an object named
+     'energia'… CREATE SCHEMA failed"*. Era la primera sincronización del schema en ese endpoint;
+     que chocara con la sincronización de fondo es una deducción.
+  2. El reintento pidió una sesión de Spark nueva y recibió 430 `TooManyRequestsForCapacity`: la
+     excepción dejó la sesión compartida en estado Failed y la F4 todavía no la había liberado.
+- **La decisión:** sacar el refresco del pipeline. La sincronización es automática y en general
+  tarda menos de un minuto (verificado, [metadata sync](https://learn.microsoft.com/en-us/fabric/data-engineering/sql-analytics-endpoint-metadata-sync));
+  forzarla solo sirve para un paso siguiente que lea por SQL, y hoy no hay ninguno. El notebook
+  queda en el repo para la fase 4, antes de gold. Cuando vuelva: reintentar dentro de la misma
+  sesión antes de fallar e imprimir una línea por tabla.
+- **Costo aceptado:** el proceso de fondo se detiene tras 15 minutos sin consultas; la primera
+  consulta después de un rato puede tardar en ver lo último.
+- **Alternativas descartadas:**
+  - Variable library con los GUID de cada ambiente: hay que cargarlos y cambian si el lakehouse se
+    recrea (pasó en la D14). Además, la doc no confirma que ese campo acepte variables.
+  - `$items.Lakehouse.lh_silver.$sqlendpointid` en `parameter.yml`: sirve con `fabric-cicd`
+    (fase 2), no con `dp-oil`.
+  - Corregir el GUID a mano en prod después de cada despliegue.
+- **En Azure:** en Data Factory, lo que cambia por ambiente se reemplaza con los parámetros del
+  ARM template al desplegar.
+
+### D23. Cada cambio entra por una rama y un PR, desde un workspace de feature
+
+- **Qué dice la doc:** *"Git best practice is for developers to have a separate runtime
+  environment - a different workspace"* (verificado, [manage-branches](https://learn.microsoft.com/en-us/fabric/cicd/git-integration/manage-branches)).
+  Después del merge, dev se actualiza desde Git y se promueve con el deployment pipeline
+  ([manage-deployment](https://learn.microsoft.com/en-us/fabric/cicd/manage-deployment), opción 3).
+- **Cómo:** `oil-feat` se creó con *Branch out* desde `oil-dev` y se reutiliza cambiándole la rama,
+  como admite la doc para un solo desarrollador. El ciclo: rama → cambio y prueba en `oil-feat` →
+  commit → PR en GitHub → merge → *Update all* en `oil-dev` → `dp-oil` a prod.
+- **Límites:**
+  - En `oil-feat` los lakehouses llegan vacíos, porque Git solo versiona metadatos. La prueba con
+    datos se hace en `oil-dev` después del merge (criterio propio).
+  - El trial admite 3 SQL databases: dev, prod y feat.
+  - `main` no queda protegida por una regla: GitHub no aplica rulesets en un repo privado de una
+    cuenta gratuita. La convención se sostiene por disciplina.
+- **Lo que costó:** al actualizar dev, `DuplicateQueryName`: una consulta personal "SQL query 1"
+  chocaba con el script que venía de Git. Se renombró la de dev, y el script pasó a llamarse
+  `PostDeployment_fuentes`.
+- **En Azure:** igual con Azure Repos: rama de feature, PR con branch policies, y Data Factory
+  publica desde la collaboration branch.
+
+### D24. `control.fuente` viaja como código: un script post-deployment
+
+- **Qué hace:** `PostDeployment_fuentes.sql` es un `MERGE` que deja `control.fuente` igual a la
+  lista del script. Fabric lo corre *"as part of any update from source control or deployment
+  pipeline deployment"* (verificado, [source control de SQL database](https://learn.microsoft.com/en-us/fabric/database/sql/source-control)).
+  Sin él, los despliegues llevan la estructura y no los datos: prod tenía la tabla vacía.
+- **Cómo se registra:** en el editor de consultas, *Shared queries* > *Set as Post-deployment
+  script*. Fabric escribe el `PostDeploy` en el `.sqlproj`; la doc avisa que lo que se edite a
+  mano en ese archivo se pisa.
+- **Idempotente y sin borrar:** se puede correr cuantas veces sea. Una fuente se apaga con
+  `activa = 0`, así su historial en `version_cargada` (que tiene una clave foránea a `fuente`)
+  queda.
+- **Por qué los IDs de CKAN van escritos:** son los mismos en todos los ambientes y no son
+  secretos: son la configuración del pipeline guiado por metadatos (D16), y su lugar es Git.
+- **Probado:** el dacpac de prod incluye `postdeploy.sql` con el `MERGE`, y la primera corrida de
+  prod leyó las 2 fuentes.
+- **Alternativa descartada:** cargar las filas a mano en prod: no quedan en Git, cada ambiente
+  puede terminar distinto y se pierden si la base se recrea.
+- **En Azure:** igual, con un SQL project (dacpac) y su post-deployment script, desplegado con
+  SqlPackage desde Azure DevOps.
+
+### D25. Prod corre todos los días a las 12:00, con aviso de falla por mail
+
+- **Schedule:** `pl_ingesta` de `oil-prod`, diario a las 12:00 (UTC-03:00). Solo prod: dev se
+  corre a mano.
+- **Por qué diario**, aunque el portal publique una vez por mes: con el watermark, un día sin
+  cambios no baja nada, y cada corrida suma historial de operación (la fase 6 pide 4 semanas o
+  más). Es a una hora con la compu prendida, por el gateway (D18).
+- **Aviso de falla:** llega solo en corridas programadas (verificado, [alertas](https://learn.microsoft.com/en-us/fabric/data-factory/create-alerts-for-pipeline-runs)).
+  La doc habla de *"users or groups"*; el usuario del tenant no tiene buzón (sin mail ni Exchange,
+  verificado por Graph) y la dirección de Gmail queda marcada como externa. Que llegue se
+  comprueba con la prueba de falla.
+- **Primera corrida en prod (13/11, 02:08 UTC, manual):** 8,5 minutos; padrón 1.172.135 bytes y
+  producción 148.923.474 bytes (leído = escrito); bronze 431.322 filas de producción y 86.386 de
+  padrón; silver 431.319 vigentes y 3 en cuarentena, como dev.
+- **Costo aceptado:** Bronze y Silver corren aunque no haya archivos nuevos. Saltearlos no es
+  trivial: si una corrida baja un archivo y falla después, la siguiente no vería versión nueva y
+  el archivo quedaría sin procesar.
+- **En Azure:** un schedule trigger de Data Factory, con las alertas en Azure Monitor.
