@@ -4,3 +4,7 @@ CREATE TABLE [control].[fuente] (
     [activa]       BIT          CONSTRAINT [df_fuente_activa] DEFAULT ((1)) NOT NULL,
     CONSTRAINT [pk_fuente] PRIMARY KEY CLUSTERED ([fuente] ASC)
 );
+
+
+GO
+

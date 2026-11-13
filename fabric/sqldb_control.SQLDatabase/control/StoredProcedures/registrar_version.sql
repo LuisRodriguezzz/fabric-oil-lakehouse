@@ -12,3 +12,6 @@ BEGIN
         INSERT INTO control.version_cargada (fuente, version, tamano_bytes, archivo, corrida)
         VALUES (@fuente, @version, @tamano_bytes, @archivo, @corrida);
 END
+
+GO
+
