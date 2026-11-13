@@ -1,0 +1,10 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/variableLibrary/definition/valueSet/1.0.0/schema.json",
+  "name": "PROD",
+  "variableOverrides": [
+    {
+      "name": "sql_endpoint_silver",
+      "value": "ae044e32-f8b3-4374-99a6-3bd92ba712ed"
+    }
+  ]
+}
