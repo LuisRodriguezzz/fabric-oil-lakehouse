@@ -42,4 +42,10 @@
       <Version>170.0.0</Version>
     </PackageReference>
   </ItemGroup>
+  <ItemGroup>
+    <Build Remove=".sharedqueries\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PostDeploy Include=".sharedqueries\SQL query 1.sql" />
+  </ItemGroup>
 </Project>

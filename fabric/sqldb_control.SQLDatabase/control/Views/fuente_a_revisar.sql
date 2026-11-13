@@ -11,3 +11,6 @@ FROM control.fuente AS f
                   WHERE v.fuente = f.fuente
                   ORDER BY v.cargado_en DESC) AS u
 WHERE f.activa = 1;
+
+GO
+

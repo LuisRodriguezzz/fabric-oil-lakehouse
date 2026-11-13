@@ -8,3 +8,7 @@ CREATE TABLE [control].[version_cargada] (
     CONSTRAINT [pk_version_cargada] PRIMARY KEY CLUSTERED ([fuente] ASC, [version] ASC, [tamano_bytes] ASC),
     CONSTRAINT [fk_version_cargada_fuente] FOREIGN KEY ([fuente]) REFERENCES [control].[fuente] ([fuente])
 );
+
+
+GO
+
