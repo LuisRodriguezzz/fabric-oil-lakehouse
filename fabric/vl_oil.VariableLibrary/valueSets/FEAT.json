@@ -1,0 +1,10 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/variableLibrary/definition/valueSet/1.0.0/schema.json",
+  "name": "FEAT",
+  "variableOverrides": [
+    {
+      "name": "sql_endpoint_silver",
+      "value": "0e31e700-04a9-40b1-865e-310b35a39fd2"
+    }
+  ]
+}

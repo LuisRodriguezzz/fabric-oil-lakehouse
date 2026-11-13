@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/variableLibrary/definition/variables/1.0.0/schema.json",
+  "variables": [
+    {
+      "name": "sql_endpoint_silver",
+      "note": "",
+      "type": "Guid",
+      "value": "d6fce898-719a-4828-9256-9835e71374b7"
+    }
+  ]
+}

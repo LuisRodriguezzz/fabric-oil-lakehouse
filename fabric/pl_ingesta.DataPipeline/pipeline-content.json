@@ -303,7 +303,47 @@
             ]
           }
         ]
+      },
+      {
+        "type": "RefreshSqlEndpoint",
+        "typeProperties": {
+          "workspaceId": {
+            "value": "@pipeline().DataFactory",
+            "type": "Expression"
+          },
+          "sqlEndpointId": {
+            "value": "@pipeline().libraryVariables.vl_oil_sql_endpoint_silver",
+            "type": "Expression"
+          },
+          "recreateTables": false
+        },
+        "externalReferences": {
+          "connection": "c9d01b95-b8da-48e4-aa18-3bb9da34abc1"
+        },
+        "policy": {
+          "timeout": "0.00:15:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "RefrescarSilver",
+        "dependsOn": [
+          {
+            "activity": "Silver",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
       }
-    ]
+    ],
+    "libraryVariables": {
+      "vl_oil_sql_endpoint_silver": {
+        "type": "String",
+        "variableName": "sql_endpoint_silver",
+        "libraryName": "vl_oil"
+      }
+    }
   }
 }
