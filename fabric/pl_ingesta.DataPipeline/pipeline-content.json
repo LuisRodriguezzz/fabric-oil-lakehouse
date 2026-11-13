@@ -305,14 +305,10 @@
         ]
       },
       {
-        "type": "RefreshSqlEndpoint",
+        "type": "TridentNotebook",
         "typeProperties": {
-          "workspaceId": "00000000-0000-0000-0000-000000000000",
-          "sqlEndpointId": "bb83ffa3-f173-4451-bb9c-ab3065b2cc44",
-          "recreateTables": false
-        },
-        "externalReferences": {
-          "connection": "c9d01b95-b8da-48e4-aa18-3bb9da34abc1"
+          "notebookId": "232ba9b0-333f-8289-4fe1-071960fe7e70",
+          "workspaceId": "00000000-0000-0000-0000-000000000000"
         },
         "policy": {
           "timeout": "0.00:15:00",
@@ -321,37 +317,10 @@
           "secureInput": false,
           "secureOutput": false
         },
-        "name": "RefrescarBronze",
+        "name": "RefrescarSQL",
         "dependsOn": [
           {
             "activity": "Silver",
-            "dependencyConditions": [
-              "Succeeded"
-            ]
-          }
-        ]
-      },
-      {
-        "type": "RefreshSqlEndpoint",
-        "typeProperties": {
-          "workspaceId": "00000000-0000-0000-0000-000000000000",
-          "sqlEndpointId": "d6fce898-719a-4828-9256-9835e71374b7",
-          "recreateTables": false
-        },
-        "externalReferences": {
-          "connection": "c9d01b95-b8da-48e4-aa18-3bb9da34abc1"
-        },
-        "policy": {
-          "timeout": "0.00:15:00",
-          "retry": 2,
-          "retryIntervalInSeconds": 60,
-          "secureInput": false,
-          "secureOutput": false
-        },
-        "name": "RefrescarSilver",
-        "dependsOn": [
-          {
-            "activity": "RefrescarBronze",
             "dependencyConditions": [
               "Succeeded"
             ]

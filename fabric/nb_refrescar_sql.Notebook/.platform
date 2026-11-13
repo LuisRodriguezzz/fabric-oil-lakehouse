@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "nb_refrescar_sql"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "232ba9b0-333f-8289-4fe1-071960fe7e70"
+  }
+}
