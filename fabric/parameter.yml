@@ -1,0 +1,21 @@
+# Lo que cambia entre ambientes cuando fabric-cicd despliega (scripts/desplegar.py).
+#
+# Las referencias entre items del repo (el pipeline a nb_bronze, a lh_bronze, a sqldb_control)
+# viajan como logicalId y fabric-cicd las resuelve solo en el workspace de destino.
+# Las conexiones, no: viven en el tenant, no se despliegan, y el pipeline las nombra por GUID.
+#
+# En este laboratorio prod usa las mismas conexiones que dev (misma fuente, mismo gateway).
+# En una empresa, prod tendría las suyas (otro gateway, otra identidad) y acá iría su GUID.
+find_replace:
+  - find_value: "76c6a138-50f9-412d-92d6-11d10f57391a"  # conexión a sqldb_control (Lookup y SP)
+    replace_value:
+      PROD: "76c6a138-50f9-412d-92d6-11d10f57391a"
+    item_type: "DataPipeline"
+  - find_value: "d022c9b8-ce73-4a55-a795-aa38cad02256"  # oil-portal-energia-api-gw (Web)
+    replace_value:
+      PROD: "d022c9b8-ce73-4a55-a795-aa38cad02256"
+    item_type: "DataPipeline"
+  - find_value: "05cd0303-8717-4129-bc6e-b6c62ff4aa2d"  # oil-portal-energia-http-gw (Copy)
+    replace_value:
+      PROD: "05cd0303-8717-4129-bc6e-b6c62ff4aa2d"
+    item_type: "DataPipeline"

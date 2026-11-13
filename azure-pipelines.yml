@@ -1,0 +1,54 @@
+# CI/CD en Azure DevOps (Azure Pipelines). ESCRITO, SIN CORRER: crear una organización de Azure
+# DevOps exige una suscripción de Azure (D4). El circuito que corre de verdad es el de GitHub
+# Actions (.github/workflows/desplegar.yml), que hace lo mismo.
+#
+# Cómo se arma en Azure DevOps (una sola vez):
+#   1. Pipelines > New pipeline > el repo > "Existing Azure Pipelines YAML file" > este archivo.
+#   2. Project settings > Service connections > Azure Resource Manager, con "workload identity
+#      federation" (sin contraseña): nombre sc-oil-prod. Es un service principal.
+#   3. En Fabric, ese service principal es Contributor del workspace oil-prod, y el switch de
+#      tenant "Service principals can use Fabric APIs" está prendido.
+#   4. Pipelines > Environments > oil-prod > Approvals and checks: alguien aprueba antes de prod.
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [fabric/*, tests/*, scripts/desplegar.py]
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: Pruebas
+    jobs:
+      - job: pytest
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.12"
+          - script: pip install -r requirements-dev.txt && pytest -q
+            displayName: Tests de silver
+
+  - stage: Prod
+    dependsOn: Pruebas
+    jobs:
+      - deployment: DesplegarFabric
+        environment: oil-prod          # acá se configura la aprobación
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: UsePythonVersion@0
+                  inputs:
+                    versionSpec: "3.12"
+                - script: pip install -r requirements.txt
+                  displayName: Dependencias
+                - task: AzureCLI@2       # hace az login con la service connection
+                  displayName: Desplegar el repo en oil-prod
+                  inputs:
+                    azureSubscription: sc-oil-prod
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: python scripts/desplegar.py PROD

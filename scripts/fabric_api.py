@@ -72,6 +72,18 @@ class FabricApi:
                 return elementos
             params = {"continuationToken": cuerpo["continuationToken"]}
 
+    def get(self, ruta: str) -> dict:
+        r = requests.get(f"{API}{ruta}", headers=self._headers(), timeout=60)
+        if not r.ok:
+            raise RuntimeError(f"GET {ruta} -> {r.status_code}: {r.text}")
+        return r.json()
+
+    def patch(self, ruta: str, cuerpo: dict) -> dict:
+        r = requests.patch(f"{API}{ruta}", headers=self._headers(), json=cuerpo, timeout=60)
+        if not r.ok:
+            raise RuntimeError(f"PATCH {ruta} -> {r.status_code}: {r.text}")
+        return r.json() if r.content else {}
+
     def post(self, ruta: str, cuerpo: dict | None = None) -> dict:
         """POST que espera las operaciones largas (respuesta 202 con Location)."""
         r = requests.post(f"{API}{ruta}", headers=self._headers(), json=cuerpo, timeout=60)

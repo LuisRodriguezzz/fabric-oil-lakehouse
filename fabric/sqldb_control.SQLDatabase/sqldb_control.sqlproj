@@ -46,6 +46,6 @@
     <Build Remove=".sharedqueries\**" />
   </ItemGroup>
   <ItemGroup>
-    <PostDeploy Include=".sharedqueries\SQL query 1.sql" />
+    <PostDeploy Include=".sharedqueries\PostDeployment_fuentes.sql" />
   </ItemGroup>
 </Project>

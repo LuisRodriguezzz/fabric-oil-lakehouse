@@ -1,0 +1,42 @@
+# CD con GitHub Actions: lo mismo que azure-pipelines.yml, en GitHub.
+# Despliega el repo en oil-prod con fabric-cicd después de que pasen los tests.
+#
+# Lo que hace falta una sola vez (todavía no está armado):
+#   1. En Entra ID, una app registration (service principal) con una credencial federada para este
+#      repo y el environment "oil-prod": GitHub entra por OIDC, sin contraseña.
+#   2. En GitHub, el environment "oil-prod" con aprobación obligatoria, y las variables
+#      AZURE_CLIENT_ID y AZURE_TENANT_ID.
+#   3. En Fabric, el switch de tenant "Service principals can use Fabric APIs" y el service
+#      principal como Contributor de oil-prod.
+name: desplegar
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["fabric/**", "scripts/desplegar.py"]
+
+permissions:
+  id-token: write      # para pedir el token OIDC
+  contents: read
+
+jobs:
+  pruebas:
+    uses: ./.github/workflows/pruebas.yml
+
+  prod:
+    needs: pruebas
+    runs-on: ubuntu-latest
+    environment: oil-prod   # la aprobación se configura en GitHub, en este environment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true   # no hay suscripción de Azure: solo Fabric
+      - run: python scripts/desplegar.py PROD
