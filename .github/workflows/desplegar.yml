@@ -11,10 +11,10 @@
 name: desplegar
 
 on:
+  # Solo a mano hasta la fase 2: todavía no existen el service principal ni su permiso en Fabric,
+  # así que un despliegue automático fallaría al iniciar sesión. Cuando existan, se vuelve a
+  # agregar el disparo con cada push a main (rutas fabric/** y scripts/desplegar.py).
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ["fabric/**", "scripts/desplegar.py"]
 
 permissions:
   id-token: write      # para pedir el token OIDC

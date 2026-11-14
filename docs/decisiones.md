@@ -452,7 +452,10 @@ fuente sume columnas es un caso muy común.
 - **En Azure:** no encontré en la doc oficial de Synapse un ajuste equivalente para compartir la
   sesión entre las actividades Notebook de un pipeline.
 
-### D22. El SQL endpoint no se refresca desde el pipeline (por ahora)
+### D22. El SQL endpoint no se refresca desde el pipeline (reemplazada por la D26)
+
+Lo que sigue vale como historia: el refresco volvió como actividad nativa, con una Variable
+library (D26), cuando gold empezó a leer silver por SQL.
 
 - **Qué pasó:** F7 había sumado dos actividades "Refresh SQL endpoint" con el `workspaceId` y el
   `sqlEndpointId` de dev. Al desplegar con `dp-oil` (12/11), el *auto-binding* reasignó las
@@ -545,3 +548,98 @@ fuente sume columnas es un caso muy común.
   trivial: si una corrida baja un archivo y falla después, la siguiente no vería versión nueva y
   el archivo quedaría sin procesar.
 - **En Azure:** un schedule trigger de Data Factory, con las alertas en Azure Monitor.
+
+### D26. El refresco del SQL endpoint vuelve como actividad nativa, con una Variable library
+
+- **Qué:** `RefrescarSilver` (actividad *Refresh SQL analytics endpoint*) con el workspace en
+  `@pipeline().DataFactory` y el endpoint en `vl_oil.sql_endpoint_silver`, que tiene un valor por
+  ambiente: Default (dev), FEAT y PROD. Cada workspace activa su juego una sola vez, y el
+  despliegue no lo pisa (verificado, [Variable library CI/CD](https://learn.microsoft.com/en-us/fabric/cicd/variable-library/variable-library-cicd)).
+  `@pipeline().DataFactory` devuelve el ID del workspace donde corre el pipeline (verificado,
+  [expression language](https://learn.microsoft.com/en-us/fabric/data-factory/expression-language)).
+- **Por qué volvió:** gold lee silver por el SQL endpoint y necesita que ya vea lo último. Entre
+  las opciones, la actividad nativa es mejor que un notebook que prende una sesión de Spark para
+  llamar a una API (y que, si falla, deja en Failed la sesión compartida) y mejor que una espera
+  fija, que no garantiza nada. La doc recomienda una sola actividad de refresco, al final.
+- **Probado:** en `oil-feat` resolvió el endpoint y el workspace de feat (13/11).
+- **Alternativas descartadas:** el notebook con semantic link (D22), un *Wait*, y `parameter.yml`
+  (sirve solo con `fabric-cicd`).
+- **Riesgos a tener presentes:**
+  - Si se recrea `lh_silver`, cambia el ID de su endpoint: se actualiza el valor en `vl_oil` por
+    el ciclo de rama y PR.
+  - Una variable nueva hereda el valor Default (el de dev) en todos los juegos y no da error: cada
+    juego necesita su propio valor.
+- **En Azure:** en Data Factory, lo que cambia por ambiente se reemplaza con los parámetros del
+  ARM template al desplegar.
+
+### D27. Gold en un Warehouse: estrella cargada por un stored procedure, en una transacción, con controles
+
+- **Patrón:** bronze y silver en lakehouses, gold en un Warehouse (verificado, patrón 2 de
+  [medallion](https://learn.microsoft.com/en-us/fabric/onelake/onelake-medallion-lakehouse-architecture)).
+  Schemas `dim` y `fact` para lo que se lee y `carga` para el procedure: permiten dar permisos por
+  schema y dejan nombres cortos en Power BI (criterio propio).
+- **Tablas:** `dim.fecha` (clave `AAAAMM`); `dim.empresa` y `dim.yacimiento` (SCD tipo 1 con
+  `MERGE`, más una fila `-1` "Sin dato"); `dim.pozo` (SCD tipo 2); `fact.produccion_mensual`.
+- **SCD2:** los tramos se recalculan desde la historia mensual de silver (`LAG` para ver si
+  cambió algo respecto del mes anterior y una suma acumulada para numerar los tramos), y se
+  sincronizan con `MERGE` por `(idpozo, vigente_desde)`. Así entra una rectificación de un mes
+  viejo, que un SCD2 incremental de "hoy contra ayer" no vería. Es el criterio de AWS.
+- **Todo en una transacción**, con aislamiento snapshot: quien consulta durante la carga ve la
+  versión anterior hasta el `COMMIT` (verificado, [transactions](https://learn.microsoft.com/en-us/fabric/data-warehouse/transactions)).
+- **Controles antes de publicar:** filas del fact = filas de silver, un solo tramo actual por pozo
+  y ningún tramo superpuesto. Si uno falla: `THROW`, `ROLLBACK`, y gold queda como estaba. Silver
+  valida el dato que llega (con cuarentena); gold valida que el modelo quedó bien armado.
+- **Lo que no tiene el Warehouse:** scripts post-deployment (los que se agregan por Git no se
+  conservan), así que la fila `-1` la asegura el procedure con `IDENTITY_INSERT`. `IDENTITY` es
+  solo `BIGINT` y no correlativo; PK y FK solo `NOT ENFORCED`.
+- **Por qué recálculo completo y no incremental:** silver se pisa entera, el portal rectifica meses
+  viejos y 431 mil filas se recalculan en segundos. Con los 21 años: una señal en silver
+  (`_actualizado_en` y `_borrado`), un watermark de gold en su tabla de control, recálculo por
+  pozo afectado y reconciliación contra el recálculo completo.
+- **Imperativo y no declarativo:** el Warehouse no tiene tablas declarativas, y las lake views no
+  hacen `MERGE` ni SCD2. El *dbt job* de Fabric existe (con estado contradictorio entre GA y
+  preview) y queda como extra para comparar.
+- **Resultado en `oil-feat` (14/11):** 431.319 filas en el fact, igual que silver; 23.032 tramos
+  para 5.164 pozos. Pendiente: revisar qué atributo abre tantos tramos (unos 4,5 por pozo).
+- **Preview:** la integración de Git y los deployment pipelines del Warehouse.
+- **En Azure:** es el *dedicated SQL pool* de Synapse: el mismo T-SQL, `IDENTITY` no correlativo
+  y claves `NOT ENFORCED`.
+
+### D28. Referencias entre ambientes: qué traduce Fabric y qué hay que parametrizar
+
+- **La regla:** al commitear, Fabric cambia las referencias a items que están en Git por su
+  `logicalId`, y el workspace por ceros ("este mismo workspace"). Al actualizar o desplegar, las
+  vuelve a resolver en el workspace de destino. Todo lo demás (un GUID en un campo suelto, una
+  dirección, una URL) viaja literal y sigue apuntando al ambiente donde se creó.
+- **Lo que pasó en este proyecto:**
+
+  | Referencia | ¿Se tradujo? |
+  |---|---|
+  | Actividades Notebook; Lookup y stored procedure a `sqldb_control`; Copy a `lh_bronze` | Sí |
+  | *Refresh SQL endpoint* | No: el SQL endpoint no está en Git (D22, D26) |
+  | Stored procedure a `wh_gold` | El ID sí; la dirección SQL (`endpoint`) no |
+  | Conexiones del tenant | No, a propósito: son las mismas en todos los ambientes |
+
+- **El caso de Gold (14/11):** en dev se conectó a la dirección de feat y pidió el warehouse de
+  dev: error 18456, *"database was not found"*. Falló sin escribir en feat (verificado en su
+  `_delta_log`). La dirección SQL es una por workspace: el lakehouse y el warehouse de un mismo
+  workspace la comparten (verificado por la API).
+- **El arreglo:** la conexión de Gold con contenido dinámico. *Connection (Warehouse ID)* =
+  `vl_oil.wh_gold_id`, *SQL connection string* = `vl_oil.sql_host` y workspace =
+  `@pipeline().DataFactory`. Con contenido dinámico, Fabric no completa ningún campo de esa
+  conexión. Probado en feat (14/11): cargó el warehouse de feat y no tocó el de dev.
+- **`PROD` de `wh_gold_id` en ceros** hasta que exista el `wh_gold` de prod: un valor de relleno
+  tiene que fallar, nunca apuntar a otro ambiente.
+- **Cómo detectarlo:**
+  1. En el JSON de Git, buscar GUIDs que no sean un `logicalId`, ni ceros, ni una conexión, y
+     direcciones `*.fabric.microsoft.com`.
+  2. Abrir la actividad en el ambiente de destino y mirar a qué workspace apunta.
+  3. Correr en el ambiente de abajo y ver dónde quedaron los datos.
+
+  El primer punto se puede automatizar en CI (fase 2). La doc de `fabric-cicd` dice que las
+  actividades que no usan el `logicalId` *"require parameterization"*.
+- **Corrección:** la doc de la actividad Copy pide el ID de una conexión para un Warehouse
+  dinámico; la actividad Stored procedure pide en ese campo el ID del warehouse. La conexión
+  `oil-warehouse luis` quedó sin uso (limpieza).
+- **En Azure:** los linked services de Data Factory se parametrizan, y el ARM template cambia los
+  valores por ambiente.

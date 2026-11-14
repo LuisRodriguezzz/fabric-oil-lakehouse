@@ -5,6 +5,14 @@
     {
       "name": "sql_endpoint_silver",
       "value": "0e31e700-04a9-40b1-865e-310b35a39fd2"
+    },
+    {
+      "name": "wh_gold_id",
+      "value": "20ff5bcb-fd14-4143-a84c-633817a6645b"
+    },
+    {
+      "name": "sql_host",
+      "value": "cfvlzaavw54eljmzofachxxfx4-cb4qs76br2uulgjr3qcdtkzpda.datawarehouse.fabric.microsoft.com"
     }
   ]
 }
