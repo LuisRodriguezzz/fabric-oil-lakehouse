@@ -6,6 +6,18 @@
       "note": "",
       "type": "Guid",
       "value": "d6fce898-719a-4828-9256-9835e71374b7"
+    },
+    {
+      "name": "wh_gold_id",
+      "note": "",
+      "type": "Guid",
+      "value": "e5cd7adc-81db-4583-8e77-ffbae3da04e1"
+    },
+    {
+      "name": "sql_host",
+      "note": "",
+      "type": "String",
+      "value": "cfvlzaavw54eljmzofachxxfx4-centshnyuhcetfu452th64yxfa.datawarehouse.fabric.microsoft.com"
     }
   ]
 }

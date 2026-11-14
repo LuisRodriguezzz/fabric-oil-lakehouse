@@ -343,13 +343,13 @@
           "storedProcedureName": "[carga].[cargar_gold]"
         },
         "linkedService": {
-          "name": "wh_gold",
+          "name": "1d3dd8a8_d412_462f_95b0_35ef8a0c493a",
           "properties": {
             "type": "DataWarehouse",
             "typeProperties": {
-              "artifactId": "17a6645b-6338-a84c-4143-fd1420ff5bcb",
-              "endpoint": "cfvlzaavw54eljmzofachxxfx4-cb4qs76br2uulgjr3qcdtkzpda.datawarehouse.fabric.microsoft.com",
-              "workspaceId": "00000000-0000-0000-0000-000000000000"
+              "artifactId": "@pipeline().libraryVariables.vl_oil_wh_gold_id",
+              "endpoint": "@pipeline().libraryVariables.vl_oil_sql_host",
+              "workspaceId": "@pipeline().DataFactory"
             },
             "annotations": []
           }
@@ -376,6 +376,16 @@
       "vl_oil_sql_endpoint_silver": {
         "type": "String",
         "variableName": "sql_endpoint_silver",
+        "libraryName": "vl_oil"
+      },
+      "vl_oil_wh_gold_id": {
+        "type": "String",
+        "variableName": "wh_gold_id",
+        "libraryName": "vl_oil"
+      },
+      "vl_oil_sql_host": {
+        "type": "String",
+        "variableName": "sql_host",
         "libraryName": "vl_oil"
       }
     }
