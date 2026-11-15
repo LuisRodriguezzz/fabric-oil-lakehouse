@@ -264,6 +264,25 @@ def test_el_contrato_de_produccion_tiene_sql_valido(spark, silver):
     assert (r["rectificado"], r["habilitado"]) == (False, True)
 
 
+def test_el_contrato_de_fractura_acepta_una_fila_real_y_corta_la_presion_imposible(spark, silver):
+    contrato = silver.CONTRATOS["fractura"]
+    columnas = list(contrato["tipos"])
+    # La primera fila del CSV del portal (15/11/2026).
+    real = dict(zip(columnas, (
+        "30", "159910", "APS.Nq.ADC.xp-1033", "NEUQUINA", "AGUA DEL CAJON", "AGUA DEL CAJON", "los molles",
+        "NO CONVENCIONAL", "SHALE", "0", "3", "Punzado", "0", "0", "2718.2", "0", "10190", "10897",
+        "2019-04-20", "2019-04-30", "2019-06-14 17:13:03.68279", "2019", "4", "2019", "4", "2019", "6",
+        "CAPEX S.A.", "4", "2019",
+    )))
+    real["_archivo"] = archivo("2026-11-16", "fractura_20261115T040000_1271920.csv")
+    imposible = {**real, "id_base_fractura_adjiv": "31", "presion_maxima_psi": "209640"}
+
+    r = {x["id_base_fractura_adjiv"]: x["_motivos"] for x in
+         silver.validar(bronze(spark, silver, [real, imposible], columnas), contrato).collect()}
+
+    assert r[30] == [] and r[31] == ["presion_en_rango"]
+
+
 # controlar
 
 

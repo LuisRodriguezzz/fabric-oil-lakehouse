@@ -4,9 +4,11 @@
 -- Una fuente no se borra: se apaga con activa = 0 y su historial queda.
 -- produccion (solo no convencional) se apagó en la D32: la reemplaza produccion_pozo, la
 -- familia "DDJJ abiertas y cerradas" completa, un recurso CKAN por año (2006-2026).
+-- fractura (D33): el Adjunto IV, un CSV que el portal reemplaza entero todos los días.
 MERGE control.fuente AS destino
 USING (VALUES
     ('padron',               '5578dd48-d0dd-487e-8ddc-bd3ebb1afef0', 'padron',          1),
+    ('fractura',             '2280ad92-6ed3-403e-a095-50139863ab0d', 'fractura',        1),
     ('produccion',           'b5b58cdc-9e07-41f9-b392-fb9ec68b0725', 'produccion',      0),
     ('produccion_pozo_2006', '532e9b21-3826-4083-9e25-27147b003696', 'produccion_pozo', 1),
     ('produccion_pozo_2007', '9310d724-a341-4740-be18-c87f03f8a462', 'produccion_pozo', 1),

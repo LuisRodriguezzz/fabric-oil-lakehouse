@@ -144,6 +144,68 @@ CONTRATOS = {
             "anio_del_archivo": "_fuente IS NULL OR right(_fuente, 4) = cast(anio AS string)",
         },
     },
+    # Adjunto IV: una fila por operación de fractura. El portal reemplaza el CSV entero todos los
+    # días ("datos preliminares sujetos a revisión"). Son ~5 mil filas: modo foto, se reemplaza la
+    # tabla entera; un MERGE no ahorra nada a este tamaño (D33). Rangos tomados del contrato del
+    # proyecto de AWS (docs/fuentes/fractura.md, medido el 2026-09-05).
+    "fractura": {
+        "modo": "foto",
+        "clave": ["id_base_fractura_adjiv"],
+        # Si una declaración vuelve corregida, gana la de fecha_data más nueva.
+        "version": "fecha_data",
+        "umbral_cuarentena_pct": 1.0,
+        "tipos": {
+            "id_base_fractura_adjiv": "bigint",
+            "idpozo": "bigint",
+            "sigla": "string",
+            "cuenca": "string",
+            "areapermisoconcesion": "string",
+            "yacimiento": "string",
+            "formacion_productiva": "string",
+            "tipo_reservorio": "string",
+            "subtipo_reservorio": "string",
+            "longitud_rama_horizontal_m": "double",
+            "cantidad_fracturas": "int",
+            "tipo_terminacion": "string",
+            "arena_bombeada_nacional_tn": "double",
+            "arena_bombeada_importada_tn": "double",
+            "agua_inyectada_m3": "double",
+            "co2_inyectado_m3": "double",
+            "presion_maxima_psi": "double",
+            "potencia_equipos_fractura_hp": "double",
+            "fecha_inicio_fractura": "date",
+            "fecha_fin_fractura": "date",
+            "fecha_data": "timestamp",
+            "anio_if": "int",
+            "mes_if": "int",
+            "anio_ff": "int",
+            "mes_ff": "int",
+            "anio_carga": "int",
+            "mes_carga": "int",
+            "empresa_informante": "string",
+            "mes": "int",
+            "anio": "int",
+        },
+        "reglas": {
+            "clave_completa": "id_base_fractura_adjiv IS NOT NULL AND idpozo IS NOT NULL",
+            "fecha_inicio_informada": "fecha_inicio_fractura IS NOT NULL",
+            "mes_valido": "mes BETWEEN 1 AND 12",
+            "empresa_informada": "empresa_informante IS NOT NULL",
+            "tipo_reservorio_conocido": (
+                "tipo_reservorio IS NULL OR tipo_reservorio IN "
+                "('CONVENCIONAL', 'NO CONVENCIONAL', 'NO DISCRIMINADO')"
+            ),
+            "cantidades_no_negativas": (
+                "coalesce(arena_bombeada_nacional_tn, 0) >= 0 AND coalesce(arena_bombeada_importada_tn, 0) >= 0 "
+                "AND coalesce(agua_inyectada_m3, 0) >= 0 AND coalesce(co2_inyectado_m3, 0) >= 0"
+            ),
+            "rama_horizontal_en_rango": "longitud_rama_horizontal_m IS NULL OR longitud_rama_horizontal_m BETWEEN 0 AND 10000",
+            "etapas_en_rango": "cantidad_fracturas IS NULL OR cantidad_fracturas BETWEEN 1 AND 200",
+            # Una fractura real trabaja entre 5.000 y 15.000 psi: arriba de 20.000 es un error de unidad.
+            "presion_en_rango": "presion_maxima_psi IS NULL OR presion_maxima_psi BETWEEN 0 AND 20000",
+            "potencia_en_rango": "potencia_equipos_fractura_hp IS NULL OR potencia_equipos_fractura_hp BETWEEN 0 AND 100000",
+        },
+    },
     "padron": {
         "modo": "foto",
         "clave": ["idpozo"],
