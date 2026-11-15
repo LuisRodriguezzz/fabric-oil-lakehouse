@@ -774,6 +774,12 @@ library (D26), cuando gold empezó a leer silver por SQL.
     silver) → correr el pipeline en cada ambiente, que crea `produccion_pozo` → PR 2 (gold lee
     `produccion_pozo`) → más adelante, borrar `produccion` con OK. Mientras tanto gold sigue
     leyendo `produccion`, que queda congelada.
+- **Primera corrida en `oil-feat` (15/11, 43 min):** 21 descargas de ~40 s cada una por el gateway
+  (~8,7 MB/s), bronze 2,5 min, silver 9,8 min. Bronze `produccion_pozo` quedó con 18.409.048 filas
+  y silver con 18.408.823 vigentes + 225 en cuarentena (suman exacto). Los 21 años pasaron el
+  control (la cuarentena más alta, 2009 con 0,0044 %). AWS midió 18.234.202 filas el 2026-09-12:
+  la diferencia son los meses de 2026 publicados después. Pendiente: silver quedó en 200 archivos
+  (las particiones por defecto del MERGE); va con el mantenimiento (OPTIMIZE).
 - **Supuestos:** cada CSV es la foto completa de un año; el portal cambia la fecha cuando cambia el
   archivo; la versión del origen se ordena por tiempo del origen, no por el de proceso
   (`_cargado_en`).
