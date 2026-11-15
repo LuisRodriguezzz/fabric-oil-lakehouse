@@ -1,0 +1,66 @@
+table fecha
+	lineageTag: b9baf69f-24f0-417b-84ca-619501d88770
+	sourceLineageTag: [dim].[fecha]
+	dataCategory: Time
+
+	column fecha_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 174a7e91-7159-4730-b2b1-14ce75c84bee
+		sourceLineageTag: fecha_key
+		summarizeBy: none
+		sourceColumn: fecha_key
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column fecha
+		dataType: dateTime
+		isKey
+		formatString: General Date
+		lineageTag: 84ab700e-44a9-4123-af8f-3e4e0e0d48df
+		sourceLineageTag: fecha
+		summarizeBy: none
+		sourceColumn: fecha
+
+		annotation SummarizationSetBy = Automatic
+
+	column anio
+		dataType: int64
+		formatString: 0
+		lineageTag: 0744a876-11bf-4fb7-9d51-c3ee156b5212
+		sourceLineageTag: anio
+		summarizeBy: none
+		sourceColumn: anio
+
+		annotation SummarizationSetBy = Automatic
+
+	column mes
+		dataType: int64
+		formatString: 0
+		lineageTag: 23ecc3d0-9ed0-43a1-9e6d-05b873b3d376
+		sourceLineageTag: mes
+		summarizeBy: none
+		sourceColumn: mes
+
+		annotation SummarizationSetBy = Automatic
+
+	column trimestre
+		dataType: int64
+		formatString: 0
+		lineageTag: 8d10bc6a-eb97-4863-9dd8-527e776403e7
+		sourceLineageTag: trimestre
+		summarizeBy: none
+		sourceColumn: trimestre
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fecha = entity
+		mode: directLake
+		source
+			entityName: fecha
+			schemaName: dim
+			expressionSource: 'DirectLake - wh_gold'
+

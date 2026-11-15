@@ -1,0 +1,60 @@
+table yacimiento
+	lineageTag: c528c0a1-a234-41be-a9b6-b2309f46dcf5
+	sourceLineageTag: [dim].[yacimiento]
+
+	column yacimiento_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: d094dbe6-8ddb-4a3a-aac4-90a2eb55bf91
+		sourceLineageTag: yacimiento_key
+		summarizeBy: none
+		sourceColumn: yacimiento_key
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column idareayacimiento
+		dataType: string
+		lineageTag: a7c7ccf8-4589-4735-a335-be4c745d86c1
+		sourceLineageTag: idareayacimiento
+		summarizeBy: none
+		sourceColumn: idareayacimiento
+
+		annotation SummarizationSetBy = Automatic
+
+	column areayacimiento
+		dataType: string
+		lineageTag: 35d825ae-a8b6-4d06-9d75-51a91a336406
+		sourceLineageTag: areayacimiento
+		summarizeBy: none
+		sourceColumn: areayacimiento
+
+		annotation SummarizationSetBy = Automatic
+
+	column cuenca
+		dataType: string
+		lineageTag: 052534fa-89d9-4691-a7ed-325b5690915f
+		sourceLineageTag: cuenca
+		summarizeBy: none
+		sourceColumn: cuenca
+
+		annotation SummarizationSetBy = Automatic
+
+	column provincia
+		dataType: string
+		lineageTag: 853de1be-410b-4fe7-ba1d-bcfcac33b305
+		sourceLineageTag: provincia
+		summarizeBy: none
+		sourceColumn: provincia
+
+		annotation SummarizationSetBy = Automatic
+
+	partition yacimiento = entity
+		mode: directLake
+		source
+			entityName: yacimiento
+			schemaName: dim
+			expressionSource: 'DirectLake - wh_gold'
+

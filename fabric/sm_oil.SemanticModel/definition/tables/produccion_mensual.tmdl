@@ -1,0 +1,169 @@
+table produccion_mensual
+	lineageTag: 2448a646-7cd2-4640-80b7-81d82964811d
+	sourceLineageTag: [fact].[produccion_mensual]
+
+	measure 'Petróleo (m³)' = SUM ( produccion_mensual[prod_pet] )
+		formatString: #,0
+		displayFolder: Producción
+		lineageTag: 3a1a96e3-d3f2-415d-a593-8a6b7f58230d
+
+	measure 'Gas (miles de m³)' = SUM ( produccion_mensual[prod_gas] )
+		formatString: #,0
+		displayFolder: Producción
+		lineageTag: c005da49-61b9-404e-8040-42d4c3c124a0
+
+	measure 'Agua (m³)' = SUM ( produccion_mensual[prod_agua] )
+		formatString: #,0
+		displayFolder: Producción
+		lineageTag: 3b30f57f-6680-4048-9b16-2b17387f1895
+
+	measure 'Petróleo (bbl)' = [Petróleo (m³)] * 6.28981
+		formatString: #,0
+		displayFolder: Producción
+		lineageTag: 5b8ccda2-1801-463f-beff-236fd715d5bd
+
+	measure 'Pozos que declararon' = COUNTROWS ( SUMMARIZE ( produccion_mensual, pozo[idpozo] ) )
+		formatString: #,0
+		displayFolder: Producción
+		lineageTag: ada57a39-70a4-472a-8013-817fa74db27d
+
+	measure 'Petróleo por pozo (m³)' = DIVIDE ( [Petróleo (m³)], [Pozos que declararon] )
+		formatString: #,0.0
+		displayFolder: Producción
+		lineageTag: 68464b61-dc5e-4be5-a261-485ef01d604f
+
+	column fecha_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 3835897f-6f99-4785-ab18-5dc8da39ec38
+		sourceLineageTag: fecha_key
+		summarizeBy: none
+		sourceColumn: fecha_key
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column pozo_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: b3236ce9-3a29-4b7f-b394-ae5cbb9979a6
+		sourceLineageTag: pozo_key
+		summarizeBy: none
+		sourceColumn: pozo_key
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column empresa_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 2650a2a0-b0dc-4d52-80e7-4138667676f1
+		sourceLineageTag: empresa_key
+		summarizeBy: none
+		sourceColumn: empresa_key
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column yacimiento_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 70568d1d-c826-44d4-be09-5c77eadb67ca
+		sourceLineageTag: yacimiento_key
+		summarizeBy: none
+		sourceColumn: yacimiento_key
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column prod_pet
+		dataType: double
+		lineageTag: e261c250-795d-4111-b894-12aacbbca5ef
+		sourceLineageTag: prod_pet
+		summarizeBy: sum
+		sourceColumn: prod_pet
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column prod_gas
+		dataType: double
+		lineageTag: 455eee26-8cc3-492b-9a7a-9e59013989cb
+		sourceLineageTag: prod_gas
+		summarizeBy: sum
+		sourceColumn: prod_gas
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column prod_agua
+		dataType: double
+		lineageTag: 8a5d3453-8ca3-4fbc-84b4-b873d3b991ae
+		sourceLineageTag: prod_agua
+		summarizeBy: sum
+		sourceColumn: prod_agua
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column iny_agua
+		dataType: double
+		lineageTag: aa65027e-ea50-4ddd-8f55-fbe4c4fca0d7
+		sourceLineageTag: iny_agua
+		summarizeBy: sum
+		sourceColumn: iny_agua
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column iny_gas
+		dataType: double
+		lineageTag: d99dbd09-5d6c-45fe-8671-c4872cf16ea4
+		sourceLineageTag: iny_gas
+		summarizeBy: sum
+		sourceColumn: iny_gas
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column tef
+		dataType: double
+		lineageTag: dd349020-58b3-4208-a3e5-2a136a13e81d
+		sourceLineageTag: tef
+		summarizeBy: sum
+		sourceColumn: tef
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column edad_meses
+		dataType: int64
+		formatString: 0
+		lineageTag: 0e9b5292-a255-4e74-868e-b10ca925192f
+		sourceLineageTag: edad_meses
+		summarizeBy: none
+		sourceColumn: edad_meses
+
+		annotation SummarizationSetBy = Automatic
+
+	partition produccion_mensual = entity
+		mode: directLake
+		source
+			entityName: produccion_mensual
+			schemaName: fact
+			expressionSource: 'DirectLake - wh_gold'
+

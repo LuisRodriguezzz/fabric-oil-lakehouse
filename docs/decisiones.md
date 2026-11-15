@@ -601,6 +601,8 @@ library (D26), cuando gold empezó a leer silver por SQL.
   preview) y queda como extra para comparar.
 - **Resultado en `oil-feat` (14/11):** 431.319 filas en el fact, igual que silver; 23.032 tramos
   para 5.164 pozos. Pendiente: revisar qué atributo abre tantos tramos (unos 4,5 por pozo).
+- **En prod (14/11):** la corrida completa cargó 431.319 filas en el fact del `wh_gold` de prod;
+  RefrescarSilver y Gold resolvieron los valores de prod desde `vl_oil`.
 - **Preview:** la integración de Git y los deployment pipelines del Warehouse.
 - **En Azure:** es el *dedicated SQL pool* de Synapse: el mismo T-SQL, `IDENTITY` no correlativo
   y claves `NOT ENFORCED`.
@@ -643,3 +645,41 @@ library (D26), cuando gold empezó a leer silver por SQL.
   `oil-warehouse luis` quedó sin uso (limpieza).
 - **En Azure:** los linked services de Data Factory se parametrizan, y el ARM template cambia los
   valores por ambiente.
+
+## Consumo (fase 5)
+
+### D29. Modelo semántico `sm_oil`: Direct Lake on OneLake sobre `wh_gold`, con parámetros por ambiente
+
+- **Qué es:** un modelo creado desde el warehouse (*New semantic model*) en modo **Direct Lake on
+  OneLake**: Power BI lee los archivos Delta de gold directo a memoria, sin copiarlos y sin pasar
+  por SQL. Es *"the recommended Direct Lake option"* para modelos nuevos, y no cae a DirectQuery:
+  si algo falla, da error (verificado, [Direct Lake](https://learn.microsoft.com/en-us/fabric/fundamentals/direct-lake-how-it-works)).
+  Los *default semantic models* del warehouse ya no existen: el modelo se crea a propósito.
+- **Tablas:** `fecha`, `empresa`, `yacimiento`, `pozo` y `produccion_mensual`. Toman los nombres
+  cortos gracias a los schemas `dim` y `fact`. Que Direct Lake lea un schema distinto de `dbo` la
+  doc no lo decía explícito: probado (`schemaName: dim`).
+- **El modelo:**
+  - 4 relaciones muchos a uno, en una sola dirección, de cada dimensión al fact.
+  - Claves ocultas, sin suma en los atributos numéricos, y `fecha` marcada como tabla de fechas.
+  - 6 medidas explícitas en la carpeta *Producción*, con la unidad en el nombre: m³, miles de m³ y
+    barriles (m³ × 6,28981).
+  - *Pozos que declararon* cuenta `pozo[idpozo]` y no `pozo_key`, porque `pozo_key` es un tramo
+    del SCD2: un pozo que cambió de estado contaría dos veces.
+- **Ambientes:** *"When you deploy a Direct Lake semantic model, it doesn't automatically bind to
+  items in the target stage"*, y los modelos no están entre los items que usan la Variable library
+  (verificado). Por eso la fuente se arma con dos parámetros M de texto, `WorkspaceId` y
+  `WarehouseId`. En Git van los valores de dev, porque las reglas no se pueden crear en la etapa
+  de desarrollo; en la etapa Production de `dp-oil`, una regla de parámetros pone los de prod.
+  Consecuencia: el modelo de `oil-feat` lee el warehouse de dev mientras se desarrolla.
+- **Refresco:** queda prendido *"Keep your Direct Lake data up to date"* (el default y lo que
+  recomienda la doc): el modelo se reencuadra solo cuando cambia gold, que se carga en una sola
+  transacción. Hace falta un refresh después del primer deploy a cada ambiente.
+- **Probado en `oil-feat` (15/11):** 147.188.383 m³ de petróleo y 5.164 pozos, consultados con DAX.
+- **Preview:** el modelo semántico en Git (TMDL).
+- **Alternativas descartadas:**
+  - Direct Lake on SQL endpoint: cae a DirectQuery sin avisar.
+  - Import: copia los datos y necesita un refresco que los vuelva a copiar.
+  - Un workspace aparte para consumo: queda para cuando haya usuarios de negocio con permisos
+    propios.
+- **En Azure:** un modelo de Azure Analysis Services, o de Power BI Premium en Import o DirectQuery
+  sobre Synapse. Es una equivalencia general: la doc de Fabric no la compara.

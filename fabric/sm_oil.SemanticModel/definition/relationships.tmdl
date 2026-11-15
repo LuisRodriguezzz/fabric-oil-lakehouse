@@ -1,0 +1,16 @@
+relationship c4637a5e-a0ee-cb00-f955-df96171b2417
+	fromColumn: produccion_mensual.fecha_key
+	toColumn: fecha.fecha_key
+
+relationship 34b1ccd9-6182-8468-07eb-b47e6706147b
+	fromColumn: produccion_mensual.pozo_key
+	toColumn: pozo.pozo_key
+
+relationship 5f061ca8-b7fe-d07d-880d-f61615f54a28
+	fromColumn: produccion_mensual.empresa_key
+	toColumn: empresa.empresa_key
+
+relationship 3a32e026-cdd1-8c57-6662-47730606a5e4
+	fromColumn: produccion_mensual.yacimiento_key
+	toColumn: yacimiento.yacimiento_key
+
