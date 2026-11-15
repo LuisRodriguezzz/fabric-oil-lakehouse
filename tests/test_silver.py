@@ -76,6 +76,72 @@ def test_dos_archivos_el_mismo_dia_desempata_el_nombre(spark, silver):
     assert [r["idpozo"] for r in resultado] == ["2"]
 
 
+# ultima_foto_por_fuente (producción completa, un archivo por año)
+
+
+def foto_de(fuente: str, version: str, fecha: str = "2026-11-16") -> dict:
+    """Linaje de un archivo de producción por año, como lo escribe bronze."""
+    nombre = f"{fuente}_{version}_300000000.csv"
+    return {"_archivo": archivo(fecha, nombre), "_fuente": fuente, "_version_origen": version}
+
+
+def test_de_cada_anio_queda_su_foto_mas_nueva(spark, silver):
+    v1_2006 = foto_de("produccion_pozo_2006", "20261003T100000")
+    v2_2006 = foto_de("produccion_pozo_2006", "20261103T100000")
+    v1_2024 = foto_de("produccion_pozo_2024", "20261015T100000")
+    filas = [
+        fila(anio="2006", **v1_2006),
+        fila(anio="2006", mes="2", **v1_2006),  # la rectificación de noviembre la sacó
+        fila(anio="2006", **v2_2006),
+        fila(anio="2024", **v1_2024),
+    ]
+
+    resultado = silver.ultima_foto_por_fuente(bronze(spark, silver, filas, list(TIPOS))).collect()
+
+    assert sorted((r["_fuente"], r["_version_origen"], r["mes"]) for r in resultado) == [
+        ("produccion_pozo_2006", "20261103T100000", "1"),
+        ("produccion_pozo_2024", "20261015T100000", "1"),
+    ]
+
+
+def test_una_foto_vieja_cargada_despues_no_le_gana_a_la_nueva(spark, silver):
+    # La versión de noviembre llegó primero; la de octubre se recargó después (otra ingest_date).
+    nueva = foto_de("produccion_pozo_2006", "20261103T100000", fecha="2026-11-03")
+    vieja = foto_de("produccion_pozo_2006", "20261003T100000", fecha="2026-11-20")
+    filas = [fila(anio="2006", prod_pet="1", **nueva), fila(anio="2006", prod_pet="9", **vieja)]
+
+    resultado = silver.ultima_foto_por_fuente(bronze(spark, silver, filas, list(TIPOS))).collect()
+
+    assert [r["prod_pet"] for r in resultado] == ["1"]
+
+
+def test_el_anio_sale_del_nombre_de_la_fuente(silver):
+    assert silver.anio_de("produccion_pozo_2006") == 2006
+
+
+def test_una_fila_de_otro_anio_que_el_archivo_va_a_cuarentena(spark, silver):
+    contrato = silver.CONTRATOS["produccion_pozo"]
+    columnas = list(contrato["tipos"])
+    base = {c: None for c in columnas} | {
+        "idpozo": "1", "mes": "1", "empresa": "YPF S.A.", **foto_de("produccion_pozo_2006", "20261103T100000"),
+    }
+    filas = [base | {"anio": "2006"}, base | {"idpozo": "2", "anio": "2007"}]
+
+    r = {x["idpozo"]: x["_motivos"] for x in silver.validar(bronze(spark, silver, filas, columnas), contrato).collect()}
+
+    assert r[1] == [] and r[2] == ["anio_del_archivo"]
+
+
+def test_la_huella_cambia_con_el_dato_y_no_con_el_linaje(spark, silver):
+    a = foto_de("produccion_pozo_2006", "20261003T100000")
+    b = foto_de("produccion_pozo_2006", "20261103T100000")
+    df = bronze(spark, silver, [fila(**a), fila(**b), fila(prod_pet="99", **b)], list(TIPOS))
+
+    h = [r["_huella"] for r in silver.con_huella(df, list(TIPOS)).collect()]
+
+    assert h[0] == h[1] and h[0] != h[2]
+
+
 # tipar
 
 
@@ -184,7 +250,7 @@ def test_las_reglas_del_contrato_de_padron_separan_buenas_de_malas(spark, silver
 
 
 def test_el_contrato_de_produccion_tiene_sql_valido(spark, silver):
-    contrato = silver.CONTRATOS["produccion"]
+    contrato = silver.CONTRATOS["produccion_pozo"]
     columnas = list(contrato["tipos"])
     f = {c: None for c in columnas} | {
         "idpozo": "157982", "anio": "2024", "mes": "1", "empresa": "YPF S.A.", "tef": "31",

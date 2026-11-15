@@ -726,3 +726,70 @@ library (D26), cuando gold empezó a leer silver por SQL.
   sin arrastrar otros cambios.
 - **Pendiente:** confirmar en la fase 2 que `fabric-cicd` publica items que están en subcarpetas.
 - **En Azure:** las carpetas de Data Factory y de Synapse, que también se guardan en Git.
+- **Comprobado (15/11):** `dp-oil` creó las 6 carpetas en prod y dejó cada item en la suya. El
+  schedule de `pl_ingesta` en prod sobrevivió al deploy desde dev, que no tiene schedule.
+
+### D32. Producción completa: 21 años, incremental por archivo y por año
+
+- **Qué:** la fuente de producción pasa a ser la familia "DDJJ abiertas y cerradas" completa
+  (2006-2026), la misma que usa el proyecto de AWS. El portal la publica en 21 CSV, uno por año, de
+  unos 300 MB (6 GB en total). La fuente anterior (`produccion`, solo no convencional) se apaga con
+  `activa = 0`; su tabla de bronze queda sin archivos nuevos.
+- **Ingesta, incremental por archivo:** cada año es una fuente en `control.fuente`
+  (`produccion_pozo_2006` … `_2026`), con la columna nueva `dataset = produccion_pozo`, que es la
+  carpeta de landing y la tabla de bronze. Se baja solo el archivo cuya fecha o tamaño cambió.
+  Los años viejos también cambian: en el último mes se rectificaron 9 de los 21.
+  Alternativa descartada: bajar los 21 cada día (6 GB diarios por el gateway).
+- **Bronze, append-only:** cada archivo es una versión completa del año. Se agrega
+  `_version_origen` (la fecha de modificación del portal, sacada del nombre del archivo).
+  Alternativa descartada: reemplazar el año en bronze, que pierde la historia y no se puede leer en
+  streaming.
+- **Silver, `MERGE` por año:** lee bronze en streaming (`availableNow` + checkpoint), se queda con la
+  última foto de cada año (`_version_origen`) y, dentro de la foto, con la última declaración
+  (`fechaingreso`). El `MERGE` borra lo que ya no viene con `WHEN NOT MATCHED BY SOURCE AND anio =
+  <año>`: sin esa condición borraría los otros años. Alternativa descartada: reemplazar el año, que
+  es más simple pero informa "cambió todo el año" y deja sin incremental a las capas de abajo. CDF
+  prendido para las materialized lake views.
+- **Cómo quedó construido:**
+  - Bronze agrega `_fuente` (el recurso: `produccion_pozo_2006`) y le pone **liquid clustering**
+    por `_fuente` (con estadísticas en esa columna, que por estar al final no las tendría), así
+    silver lee la foto de un año sin recorrer los otros 20. Alternativa descartada: particionar.
+    La doc de Fabric dice "avoid partitioning by default", pide al menos 1 GB por partición y
+    desde el Runtime 2.0 recomienda liquid clustering para lecturas; la partición queda para
+    aislar escritores concurrentes ([partitioning](https://learn.microsoft.com/en-us/fabric/data-engineering/delta-lake-partitioning),
+    [liquid clustering](https://learn.microsoft.com/en-us/fabric/data-engineering/liquid-clustering)).
+    Los archivos se agrupan con OPTIMIZE: va con el mantenimiento de bronze (retención).
+  - El stream de silver solo avisa **qué años llegaron**; la foto se lee entera de bronze. Así, si
+    un archivo quedara partido en dos tandas o llegara tarde una foto vieja, el resultado no cambia.
+  - `_huella` (hash de los datos sin linaje): el `MERGE` actualiza solo si cambió el dato.
+    `_actualizado_en` marca cuándo cambió de verdad: sirve para un gold incremental.
+  - Si un año falla el control, la tanda falla y el checkpoint no avanza: la próxima corrida la
+    repite, y el `MERGE` de los años que pasaron da el mismo resultado.
+  - Regla nueva `anio_del_archivo`: una fila de otro año que el del archivo va a cuarentena,
+    porque rompería el borrado acotado al año.
+  - **Gold se cambia en un segundo PR (expandir y después contraer).** Al actualizar el Warehouse
+    desde Git o con `dp-oil`, Fabric compila el proyecto SQL y exige que existan las tablas que el
+    procedimiento lee en otro lakehouse (error SQL71561, "unresolved reference"). Si gold apunta a
+    `produccion_pozo` antes de que silver la cree, el update falla. Orden: PR 1 (control, bronze,
+    silver) → correr el pipeline en cada ambiente, que crea `produccion_pozo` → PR 2 (gold lee
+    `produccion_pozo`) → más adelante, borrar `produccion` con OK. Mientras tanto gold sigue
+    leyendo `produccion`, que queda congelada.
+- **Primera corrida en `oil-feat` (15/11, 43 min):** 21 descargas de ~40 s cada una por el gateway
+  (~8,7 MB/s), bronze 2,5 min, silver 9,8 min. Bronze `produccion_pozo` quedó con 18.409.048 filas
+  y silver con 18.408.823 vigentes + 225 en cuarentena (suman exacto). Los 21 años pasaron el
+  control (la cuarentena más alta, 2009 con 0,0044 %). AWS midió 18.234.202 filas el 2026-09-12:
+  la diferencia son los meses de 2026 publicados después. Pendiente: silver quedó en 200 archivos
+  (las particiones por defecto del MERGE); va con el mantenimiento (OPTIMIZE).
+- **Supuestos:** cada CSV es la foto completa de un año; el portal cambia la fecha cuando cambia el
+  archivo; la versión del origen se ordena por tiempo del origen, no por el de proceso
+  (`_cargado_en`).
+- **Gold:** sigue full (TRUNCATE + INSERT) hasta medirlo con 18 M de filas. Abierto: si el
+  Warehouse puede leer el CDF de silver; si no, el incremental de gold necesita `_actualizado_en` y
+  borrado lógico en silver.
+- **Doc:** Runtime 2.0 trae Delta 4.2
+  ([runtime-2-0](https://learn.microsoft.com/en-us/fabric/data-engineering/runtime-2-0)); `NOT
+  MATCHED BY SOURCE` es de Delta 2.3 en adelante
+  ([delta-update](https://docs.delta.io/latest/delta-update.html)); VACUUM borra también el CDF
+  ([table maintenance](https://learn.microsoft.com/en-us/fabric/data-engineering/lakehouse-table-maintenance)).
+- **En Azure:** ADF con tabla de control (Lookup + ForEach por archivo) y Databricks con Auto Loader
+  y `MERGE` desde un stream con `foreachBatch`.
