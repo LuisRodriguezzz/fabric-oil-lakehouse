@@ -40,7 +40,7 @@ from pyspark.sql.types import BinaryType, LongType, StringType, StructField, Str
 
 # Datasets: carpetas de landing y tablas de bronze. produccion_pozo junta los 21 años (D32);
 # produccion (solo no convencional) quedó apagada y su tabla no recibe más archivos.
-FUENTES = ("produccion_pozo", "padron")
+FUENTES = ("produccion_pozo", "padron", "fractura")
 SCHEMA = "energia"
 
 # El workspace donde corre el notebook: oil-dev o oil-prod. Así no hay IDs fijos en el código.

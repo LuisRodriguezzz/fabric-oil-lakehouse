@@ -793,3 +793,23 @@ library (D26), cuando gold empezó a leer silver por SQL.
   ([table maintenance](https://learn.microsoft.com/en-us/fabric/data-engineering/lakehouse-table-maintenance)).
 - **En Azure:** ADF con tabla de control (Lookup + ForEach por archivo) y Databricks con Auto Loader
   y `MERGE` desde un stream con `foreachBatch`.
+
+### D33. Fractura (Adjunto IV): una foto diaria que reemplaza silver entero
+
+- **Qué:** el dataset `datos-de-fractura-de-pozos-adjunto-iv`, un CSV de ~1,3 MB (unas 5 mil
+  operaciones de fractura) que el portal reemplaza entero todos los días, con la leyenda "datos
+  preliminares sujetos a revisión". Se cruza con producción por `idpozo`.
+- **Modo foto, no `MERGE`:** silver se reemplaza entero con la última entrega, como el padrón.
+  Mismo criterio que en la D32, al revés: el `MERGE` se justifica cuando hay mucho volumen y
+  alguien aguas abajo necesita saber qué cambió. Con 5 mil filas, reescribir todo cuesta segundos
+  y es más simple. Alternativa descartada: `MERGE` con CDF.
+- **Contrato:** clave `id_base_fractura_adjiv` (única; `idpozo` + fecha no alcanza: hay pozos con
+  varias declaraciones el mismo día). Versión `fecha_data`. Rangos del contrato de AWS: presión
+  hasta 20.000 psi (arriba es error de unidad, hay filas con 209.640), potencia hasta 100.000 HP,
+  rama horizontal hasta 10.000 m, de 1 a 200 etapas. Las 41 filas con fin antes del inicio no se
+  rechazan (el contrato valida columna por columna).
+- **Bronze crece:** el archivo cambia todos los días, así que bronze suma ~5 mil filas por día
+  (~1,8 M por año). Va con la retención de bronze, igual que producción.
+- **Lo que sigue:** cruzar fractura con producción (la curva por pozo según su fractura) es el
+  primer candidato a materialized lake view.
+- **En Azure:** ADF con Copy diario a ADLS y un notebook de Databricks o Synapse que reemplaza la tabla.
