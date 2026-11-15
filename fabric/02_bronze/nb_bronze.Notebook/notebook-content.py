@@ -14,7 +14,8 @@
 # # Bronze: cada entrega de landing, tal como llegó, en una tabla Delta
 # - **Lee** `lh_bronze/Files/landing/<fuente>/ingest_date=AAAA-MM-DD/<archivo>.csv`.
 # - **Escribe** `lh_bronze.energia.<fuente>` (`Tables/energia/<fuente>`): todas las columnas como
-#   texto, más el linaje (`_archivo`, `ingest_date`, `_version_origen`, `_cargado_en`). El schema `energia` es el
+#   texto, más el linaje (`_archivo`, `ingest_date`, `_fuente`, `_version_origen`, `_cargado_en`).
+#   El schema `energia` es el
 #   sistema de origen: el portal de la Secretaría de Energía.
 # - **Acepta todo, sin mezclar columnas:** cada archivo se lee con su propio encabezado, así las
 #   columnas se asignan por nombre. Una columna nueva se suma a la tabla (las filas anteriores
@@ -51,6 +52,14 @@ FECHA_DE_INGESTA = re.compile(r"/ingest_date=(\d{4}-\d{2}-\d{2})/")
 # El pipeline nombra cada archivo <fuente>_<última modificación en el portal>_<tamaño>.csv.
 # Esa fecha es la versión del origen: con ella silver elige la foto más nueva de cada año (D32).
 VERSION_DE_ORIGEN = re.compile(r"_(\d{8}T\d{6})_\d+\.csv$")
+# La fuente es lo que va antes de la versión: produccion_pozo_2006, padron. Identifica el recurso
+# del portal y, en producción, el año que trae el archivo.
+FUENTE_DEL_ARCHIVO = re.compile(r"/([^/]+)_\d{8}T\d{6}_\d+\.csv$")
+
+# Tablas particionadas por fuente: silver lee la foto de un año sin recorrer los otros 20, y la
+# retención borra versiones viejas año por año. Solo tablas nuevas: a una tabla que ya existe sin
+# partición no se le puede agregar.
+PARTICIONES = {"produccion_pozo": ["_fuente"]}
 
 # Un stream necesita el esquema por adelantado; este es el fijo del lector binaryFile.
 ARCHIVOS = StructType([
@@ -81,9 +90,11 @@ def leer_archivo(ruta: str) -> DataFrame:
     datos = datos.toDF(*[c.lstrip(BOM).strip() for c in datos.columns])
     fecha = FECHA_DE_INGESTA.search(ruta)
     version = VERSION_DE_ORIGEN.search(ruta)
+    fuente = FUENTE_DEL_ARCHIVO.search(ruta)
     return (
         datos.withColumn("_archivo", F.lit(ruta))
         .withColumn("ingest_date", F.lit(fecha.group(1) if fecha else None))
+        .withColumn("_fuente", F.lit(fuente.group(1) if fuente else None))
         .withColumn("_version_origen", F.lit(version.group(1) if version else None))
         .withColumn("_cargado_en", F.current_timestamp())
     )
@@ -110,14 +121,16 @@ def escribir_tanda(fuente: str, destino: str, id_app: str):
             lambda a, b: a.unionByName(b, allowMissingColumns=True),
             [leer_archivo(ruta) for ruta in rutas],
         )
-        (
+        escritura = (
             datos.write.format("delta")
             .mode("append")
             .option("mergeSchema", True)  # una columna nueva se suma a la tabla
             .option("txnAppId", id_app)  # si esta tanda ya se escribió, Delta no la repite
             .option("txnVersion", numero)
-            .save(destino)
         )
+        if fuente in PARTICIONES:
+            escritura = escritura.partitionBy(*PARTICIONES[fuente])
+        escritura.save(destino)
         print(f"  tanda {numero}: {len(rutas)} archivo(s) -> {fuente}")
 
     return escribir

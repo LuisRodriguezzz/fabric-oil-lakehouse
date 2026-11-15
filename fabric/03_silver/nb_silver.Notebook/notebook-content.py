@@ -15,9 +15,15 @@
 # - **Lee** `lh_bronze.energia.<fuente>`. **Escribe** `lh_silver.energia.<fuente>`,
 #   `lh_silver.energia.<fuente>_cuarentena` y suma una fila por fuente a
 #   `lh_silver.energia.control_calidad`.
-# - **La última entrega manda:** cada archivo del portal es una foto completa de la fuente.
-#   Silver toma la entrega más nueva; una fila corregida toma el valor nuevo y una que el portal
-#   sacó deja de estar.
+# - **La última foto manda:** cada archivo del portal es una foto completa de lo que cubre.
+#   - `padron` (modo `foto`): un archivo con todo. Silver toma la entrega más nueva y reemplaza
+#     la tabla entera.
+#   - `produccion_pozo` (modo `por_anio`, D32): un archivo por año. Silver lee bronze en
+#     streaming (`availableNow` + checkpoint) solo para saber qué años llegaron; de cada año toma
+#     la foto de `_version_origen` más alta y la aplica con `MERGE`: actualiza lo que cambió,
+#     agrega lo nuevo y borra lo que ya no viene, **solo dentro de ese año**. Con Change Data Feed
+#     prendido, cada rectificación queda registrada como los cambios reales y no como el año entero.
+#   Una fila corregida toma el valor nuevo y una que el portal sacó deja de estar.
 # - **Contrato por fuente:** el tipo de cada columna, la clave y las reglas de calidad.
 # - **Nada se tira:** lo que no cumple va a cuarentena, con el texto original y los motivos.
 # - **Control antes de publicar:** si la entrega viene vacía o con demasiadas filas en
@@ -47,7 +53,7 @@ from pyspark.sql.types import (
 )
 
 # Columnas de bronze que silver conserva para rastrear cada fila hasta su archivo.
-LINAJE = ["ingest_date", "_archivo", "_cargado_en"]
+LINAJE = ["ingest_date", "_archivo", "_fuente", "_version_origen", "_cargado_en"]
 
 # Cuántas filas por archivo Parquet al escribir. Sin esto, Spark escribe un archivo por
 # partición del último paso (200 por defecto): 431 mil filas quedaban en 200 archivos chicos,
@@ -64,7 +70,8 @@ REGLAS_COMUNES = {
 }
 
 CONTRATOS = {
-    "produccion": {
+    "produccion_pozo": {
+        "modo": "por_anio",
         "clave": ["idpozo", "anio", "mes"],
         # Entre dos declaraciones de la misma clave gana la de fechaingreso más nueva.
         "version": "fechaingreso",
@@ -132,9 +139,13 @@ CONTRATOS = {
                 "tipo_de_recurso IS NULL OR tipo_de_recurso IN "
                 "('CONVENCIONAL', 'NO CONVENCIONAL', 'SIN RESERVORIO', 'NO DISCRIMINADO')"
             ),
+            # El MERGE borra lo que no vino solo dentro del año del archivo: si un archivo trajera
+            # filas de otro año, esas filas romperían ese supuesto. La fuente termina en el año.
+            "anio_del_archivo": "_fuente IS NULL OR right(_fuente, 4) = cast(anio AS string)",
         },
     },
     "padron": {
+        "modo": "foto",
         "clave": ["idpozo"],
         # El archivo no trae fecha de carga por fila: dos filas distintas del mismo pozo son
         # un conflicto.
@@ -181,6 +192,33 @@ def ultima_entrega(bronze: DataFrame) -> DataFrame:
     return bronze.join(vigente.select("_archivo"), "_archivo", "left_semi")
 
 
+def ultima_foto_por_fuente(bronze: DataFrame) -> DataFrame:
+    """De cada fuente (cada año de producción), solo las filas de su foto más nueva.
+
+    Ordena por `_version_origen`, la fecha en que el portal publicó el archivo (tiempo del origen),
+    y no por cuándo se cargó: si se recarga un archivo viejo, no le gana al nuevo. Si hubiera dos
+    archivos con la misma versión, desempata el nombre, para que el resultado sea siempre el mismo.
+    """
+    entregas = bronze.select("_fuente", "_version_origen", "_archivo").distinct()
+    orden = Window.partitionBy("_fuente").orderBy(F.desc("_version_origen"), F.desc("_archivo"))
+    vigente = entregas.withColumn("_n", F.row_number().over(orden)).filter("_n = 1")
+    return bronze.join(vigente.select("_archivo"), "_archivo", "left_semi")
+
+
+def anio_de(fuente: str) -> int:
+    """produccion_pozo_2006 -> 2006: el año que cubre el archivo de esa fuente."""
+    return int(fuente[-4:])
+
+
+def con_huella(filas: DataFrame, columnas: list[str]) -> DataFrame:
+    """Agrega `_huella`: un hash de los datos de la fila (sin el linaje).
+
+    El MERGE actualiza una fila solo si su huella cambió. Así una foto nueva que repite el mismo
+    valor no cuenta como cambio, y el Change Data Feed registra solo lo que de verdad cambió.
+    """
+    return filas.withColumn("_huella", F.sha2(F.to_json(F.struct(*[F.col(c) for c in columnas])), 256))
+
+
 def tipar(filas: DataFrame, tipos: dict[str, str]) -> DataFrame:
     """Cada columna a su tipo, sin perder lo que no convierte.
 
@@ -189,7 +227,8 @@ def tipar(filas: DataFrame, tipos: dict[str, str]) -> DataFrame:
     el texto original no estaba vacío, el nombre de la columna se anota en `_no_convierte`. El
     texto original de toda la fila queda en `_original`, para la cuarentena.
     """
-    faltan = [c for c in tipos if c not in filas.columns]
+    # Un linaje que la tabla de bronze todavía no tiene (versiones viejas) también queda nulo.
+    faltan = [c for c in [*tipos, *LINAJE] if c not in filas.columns]
     filas = filas.select("*", *[F.lit(None).cast("string").alias(c) for c in faltan])
     convertidas = {
         c: F.expr(f"try_cast(`{c}` AS {t})") for c, t in tipos.items() if t != "string"
@@ -234,10 +273,17 @@ def marcar(filas: DataFrame, reglas: dict[str, str]) -> DataFrame:
     return filas.withColumn("_motivos", F.filter(F.array(*fallas), lambda n: n.isNotNull()))
 
 
+def entrega_vigente(bronze: DataFrame, contrato: dict) -> DataFrame:
+    """Las filas de bronze que valen hoy: la última foto (modo foto) o la de cada año (por_anio)."""
+    if contrato["modo"] == "por_anio":
+        return ultima_foto_por_fuente(bronze)
+    return ultima_entrega(bronze)
+
+
 def validar(bronze: DataFrame, contrato: dict) -> DataFrame:
-    """Bronze -> última entrega -> tipos -> una versión por clave -> motivos."""
+    """Bronze -> entrega vigente -> tipos -> una versión por clave -> motivos."""
     columnas = list(contrato["tipos"])
-    filas = tipar(ultima_entrega(bronze), contrato["tipos"])
+    filas = tipar(entrega_vigente(bronze, contrato), contrato["tipos"])
     filas = una_version_por_clave(filas, contrato["clave"], contrato["version"], columnas)
     return marcar(filas, {**contrato["reglas"], **REGLAS_COMUNES})
 
@@ -258,12 +304,12 @@ def archivos_para(filas: int) -> int:
 
 
 def columnas_fuera_de_contrato(bronze: DataFrame, contrato: dict) -> list[str]:
-    """Columnas con datos en la última entrega que el contrato no conoce: alguien tiene que
+    """Columnas con datos en la entrega vigente que el contrato no conoce: alguien tiene que
     decidir si se suman. Silver no las usa hasta que entren al contrato."""
     extra = [c for c in bronze.columns if c not in contrato["tipos"] and c not in LINAJE]
     if not extra:
         return []
-    cuentas = ultima_entrega(bronze).agg(*[F.count(F.col(c)).alias(c) for c in extra]).first()
+    cuentas = entrega_vigente(bronze, contrato).agg(*[F.count(F.col(c)).alias(c) for c in extra]).first()
     return sorted(c for c in extra if cuentas[c] > 0)
 
 
@@ -313,42 +359,134 @@ def controlar(fuente: str, validada: DataFrame, contrato: dict, extra: list[str]
 # Lo que escribe: solo corre dentro de Fabric. Cuando pytest importa este archivo, __name__ no
 # es "__main__" y este bloque no se ejecuta.
 if __name__ == "__main__":
+    from delta.tables import DeltaTable
+
     WORKSPACE = notebookutils.runtime.context["currentWorkspaceName"]  # noqa: F821
     ONELAKE = f"abfss://{WORKSPACE}@onelake.dfs.fabric.microsoft.com"
     BRONZE = f"{ONELAKE}/lh_bronze.Lakehouse/Tables/energia"
     SILVER = f"{ONELAKE}/lh_silver.Lakehouse/Tables/energia"
+    CHECKPOINTS = f"{ONELAKE}/lh_silver.Lakehouse/Files/_checkpoints"
     cuando = datetime.now(timezone.utc).replace(tzinfo=None)
-    controles = []
 
-    for fuente, contrato in CONTRATOS.items():
+    def informar(control: dict) -> None:
+        print(f"{control['fuente']}: {control['filas_vigentes']} vigentes, {control['filas_cuarentena']} "
+              f"en cuarentena ({control['porcentaje_cuarentena']} %) -> {control['resultado']}")
+
+    def guardar_controles(controles: list[dict]) -> None:
+        (spark.createDataFrame(controles, ESQUEMA_CONTROL)  # noqa: F821
+         .write.format("delta").mode("append").save(f"{SILVER}/control_calidad"))
+
+    def fallar_si_hace_falta(controles: list[dict]) -> None:
+        fallas = [c for c in controles if c["resultado"] != "ok"]
+        if fallas:
+            raise RuntimeError(
+                "Silver no se actualizó para: "
+                + "; ".join(f"{c['fuente']} ({c['resultado']}, motivos {c['motivos']})" for c in fallas)
+            )
+
+    def foto(fuente: str, contrato: dict) -> None:
+        """Modo foto: la última entrega reemplaza la tabla entera."""
         bronze = spark.read.format("delta").load(f"{BRONZE}/{fuente}")  # noqa: F821
         validada = validar(bronze, contrato).persist()
         control = controlar(fuente, validada, contrato, columnas_fuera_de_contrato(bronze, contrato), cuando)
-        controles.append(control)
-        print(f"{fuente}: {control['filas_vigentes']} vigentes, {control['filas_cuarentena']} en cuarentena "
-              f"({control['porcentaje_cuarentena']} %) -> {control['resultado']}")
+        informar(control)
         # La cuarentena se escribe siempre, aunque la entrega falle el control: es lo que alguien
         # tiene que mirar para entender qué pasó. Cada fila trae su _archivo de origen.
         (cuarentena(validada).repartition(archivos_para(control["filas_cuarentena"]))
          .write.format("delta").mode("overwrite")
          .option("overwriteSchema", True).save(f"{SILVER}/{fuente}_cuarentena"))
         if control["resultado"] == "ok":
-            # Cada corrida reemplaza silver entero: es la foto de la última entrega. Delta guarda
-            # las versiones anteriores (time travel).
             (vigentes(validada, contrato).repartition(archivos_para(control["filas_vigentes"]))
              .write.format("delta").mode("overwrite")
              .option("overwriteSchema", True).save(f"{SILVER}/{fuente}"))
         validada.unpersist()
+        guardar_controles([control])
+        fallar_si_hace_falta([control])
 
-    (spark.createDataFrame(controles, ESQUEMA_CONTROL)  # noqa: F821
-     .write.format("delta").mode("append").save(f"{SILVER}/control_calidad"))
+    def crear_si_no_existe(ruta: str, ejemplo: DataFrame) -> None:
+        """La tabla vacía con el esquema de silver y Change Data Feed prendido desde el inicio:
+        el CDF solo registra lo que pasa después de prenderlo."""
+        if not DeltaTable.isDeltaTable(spark, ruta):  # noqa: F821
+            ejemplo.limit(0).write.format("delta").save(ruta)
+            spark.sql(f"ALTER TABLE delta.`{ruta}` SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")  # noqa: F821
 
-    fallas = [c for c in controles if c["resultado"] != "ok"]
-    if fallas:
-        raise RuntimeError(
-            "Silver no se actualizó para: "
-            + "; ".join(f"{c['fuente']} ({c['resultado']}, motivos {c['motivos']})" for c in fallas)
+    def por_anio(dataset: str, contrato: dict) -> None:
+        """Modo por_anio: el stream dice qué años llegaron; cada año se aplica con MERGE."""
+        origen = f"{BRONZE}/{dataset}"
+        destino = f"{SILVER}/{dataset}"
+        columnas = list(contrato["tipos"])
+        clave = " AND ".join(f"t.{c} = s.{c}" for c in contrato["clave"])
+
+        def procesar(tanda: DataFrame, numero: int) -> None:
+            fuentes = sorted(r["_fuente"] for r in tanda.select("_fuente").distinct().collect() if r["_fuente"])
+            if not fuentes:
+                return
+            # La tanda solo avisa qué años llegaron. La foto se lee entera de bronze, filtrada por
+            # la partición: aunque el stream partiera un archivo en dos tandas, cada año se aplica
+            # completo, y si llegó una foto vieja tarde, no le gana a la más nueva.
+            bronze = spark.read.format("delta").load(origen).filter(F.col("_fuente").isin(fuentes))  # noqa: F821
+            validada = validar(bronze, contrato).persist()
+            extra = columnas_fuera_de_contrato(bronze, contrato)
+            controles, aprobadas = [], []
+            for fuente in fuentes:
+                del_anio = validada.filter(F.col("_fuente") == fuente)
+                control = controlar(fuente, del_anio, contrato, extra, cuando)
+                informar(control)
+                controles.append(control)
+                # La cuarentena de ese año se reemplaza: queda la de su foto vigente.
+                escritura = cuarentena(del_anio).write.format("delta").option("mergeSchema", True)
+                if DeltaTable.isDeltaTable(spark, f"{destino}_cuarentena"):  # noqa: F821
+                    escritura = escritura.mode("overwrite").option("replaceWhere", f"_fuente = '{fuente}'")
+                escritura.save(f"{destino}_cuarentena")
+                if control["resultado"] == "ok":
+                    aprobadas.append(fuente)
+            if aprobadas:
+                nuevas = con_huella(vigentes(validada, contrato), columnas).filter(
+                    F.col("_fuente").isin(aprobadas)
+                ).withColumn("_actualizado_en", F.current_timestamp())
+                crear_si_no_existe(destino, nuevas)
+                anios = ", ".join(str(anio_de(f)) for f in aprobadas)
+                (DeltaTable.forPath(spark, destino).alias("t")  # noqa: F821
+                 .merge(nuevas.alias("s"), clave)
+                 # Solo si cambió el dato: una foto que repite el valor no es un cambio.
+                 .whenMatchedUpdateAll(condition="t._huella <> s._huella")
+                 .whenNotMatchedInsertAll()
+                 # Lo que el portal sacó, solo dentro de los años de esta tanda: sin el filtro por
+                 # año, el MERGE borraría los otros 20 años, que no vienen en estos archivos.
+                 .whenNotMatchedBySourceDelete(condition=f"t.anio IN ({anios})")
+                 .execute())
+                print(f"  tanda {numero}: MERGE de {', '.join(aprobadas)}")
+            validada.unpersist()
+            guardar_controles(controles)
+            # Si un año falla, la tanda falla: el checkpoint no avanza y la próxima corrida la
+            # repite. Los años que pasaron se vuelven a aplicar igual, y el MERGE da lo mismo.
+            fallar_si_hace_falta(controles)
+
+        consulta = (
+            spark.readStream.format("delta")  # noqa: F821
+            # La retención de bronze borra versiones viejas: esos commits no son datos nuevos.
+            .option("skipChangeCommits", True)
+            .load(origen)
+            .select("_fuente")
+            .writeStream.foreachBatch(procesar)
+            .option("checkpointLocation", f"{CHECKPOINTS}/silver_{dataset}")
+            .trigger(availableNow=True)
+            .start()
         )
+        consulta.awaitTermination()
+        if DeltaTable.isDeltaTable(spark, destino):  # noqa: F821
+            print(f"energia.{dataset}: {spark.read.format('delta').load(destino).count()} filas vigentes")  # noqa: F821
+
+    # Cada fuente se procesa aunque otra falle; al final, si alguna falló, el notebook falla y el
+    # pipeline se corta antes de gold.
+    errores = []
+    for fuente, contrato in CONTRATOS.items():
+        try:
+            por_anio(fuente, contrato) if contrato["modo"] == "por_anio" else foto(fuente, contrato)
+        except Exception as error:  # noqa: BLE001
+            errores.append(f"{fuente}: {error}")
+    if errores:
+        raise RuntimeError(" | ".join(errores))
 
 # METADATA ********************
 

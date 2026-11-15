@@ -750,6 +750,18 @@ library (D26), cuando gold empezó a leer silver por SQL.
   <año>`: sin esa condición borraría los otros años. Alternativa descartada: reemplazar el año, que
   es más simple pero informa "cambió todo el año" y deja sin incremental a las capas de abajo. CDF
   prendido para las materialized lake views.
+- **Cómo quedó construido:**
+  - Bronze agrega `_fuente` (el recurso: `produccion_pozo_2006`) y particiona `produccion_pozo` por
+    `_fuente`, así silver lee la foto de un año sin recorrer los otros 20.
+  - El stream de silver solo avisa **qué años llegaron**; la foto se lee entera de bronze. Así, si
+    un archivo quedara partido en dos tandas o llegara tarde una foto vieja, el resultado no cambia.
+  - `_huella` (hash de los datos sin linaje): el `MERGE` actualiza solo si cambió el dato.
+    `_actualizado_en` marca cuándo cambió de verdad: sirve para un gold incremental.
+  - Si un año falla el control, la tanda falla y el checkpoint no avanza: la próxima corrida la
+    repite, y el `MERGE` de los años que pasaron da el mismo resultado.
+  - Regla nueva `anio_del_archivo`: una fila de otro año que el del archivo va a cuarentena,
+    porque rompería el borrado acotado al año.
+  - Gold lee `lh_silver.energia.produccion_pozo`. La tabla `produccion` vieja queda sin uso.
 - **Supuestos:** cada CSV es la foto completa de un año; el portal cambia la fecha cuando cambia el
   archivo; la versión del origen se ordena por tiempo del origen, no por el de proceso
   (`_cargado_en`).

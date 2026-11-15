@@ -10,7 +10,7 @@ BEGIN
         WITH d AS (SELECT n FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) AS t(n)),
              numeros AS (SELECT a.n + 10 * b.n + 100 * c.n AS i FROM d a CROSS JOIN d b CROSS JOIN d c),
              meses AS (
-                 SELECT DATEADD(MONTH, i, (SELECT DATEFROMPARTS(MIN(anio), 1, 1) FROM lh_silver.energia.produccion)) AS fecha
+                 SELECT DATEADD(MONTH, i, (SELECT DATEFROMPARTS(MIN(anio), 1, 1) FROM lh_silver.energia.produccion_pozo)) AS fecha
                  FROM numeros
              )
         INSERT INTO dim.fecha (fecha_key, fecha, anio, mes, trimestre)
@@ -39,7 +39,7 @@ BEGIN
             SELECT idempresa, empresa
             FROM (SELECT idempresa, empresa,
                          ROW_NUMBER() OVER (PARTITION BY idempresa ORDER BY anio DESC, mes DESC) AS rn
-                  FROM lh_silver.energia.produccion
+                  FROM lh_silver.energia.produccion_pozo
                   WHERE idempresa IS NOT NULL) AS x
             WHERE rn = 1
         ) AS s
@@ -55,7 +55,7 @@ BEGIN
             SELECT idareayacimiento, areayacimiento, cuenca, provincia
             FROM (SELECT idareayacimiento, areayacimiento, cuenca, provincia,
                          ROW_NUMBER() OVER (PARTITION BY idareayacimiento ORDER BY anio DESC, mes DESC) AS rn
-                  FROM lh_silver.energia.produccion
+                  FROM lh_silver.energia.produccion_pozo
                   WHERE idareayacimiento IS NOT NULL) AS x
             WHERE rn = 1
         ) AS s
@@ -75,7 +75,7 @@ BEGIN
                    formacion, profundidad, prod_pet, prod_gas,
                    CONCAT(sigla, '|', tipoestado, '|', tipopozo, '|', tipoextraccion, '|', tipo_de_recurso,
                           '|', sub_tipo_recurso, '|', formacion, '|', CAST(profundidad AS VARCHAR(50))) AS huella
-            FROM lh_silver.energia.produccion
+            FROM lh_silver.energia.produccion_pozo
         ),
         cambios AS (
             SELECT *, CASE WHEN LAG(huella) OVER (PARTITION BY idpozo ORDER BY mes_declarado) = huella
@@ -150,7 +150,7 @@ BEGIN
                ISNULL(y.yacimiento_key, -1),
                s.prod_pet, s.prod_gas, s.prod_agua, s.iny_agua, s.iny_gas, s.tef,
                DATEDIFF(MONTH, p.primera_produccion, DATEFROMPARTS(s.anio, s.mes, 1))
-        FROM lh_silver.energia.produccion AS s
+        FROM lh_silver.energia.produccion_pozo AS s
         JOIN dim.pozo AS p
           ON p.idpozo = s.idpozo
          AND DATEFROMPARTS(s.anio, s.mes, 1) >= p.vigente_desde
@@ -159,7 +159,7 @@ BEGIN
         LEFT JOIN dim.yacimiento AS y ON y.idareayacimiento = s.idareayacimiento;
 
         -- 7. Controles antes de publicar: si alguno falla, THROW -> ROLLBACK y gold queda como estaba.
-        DECLARE @silver BIGINT = (SELECT COUNT(*) FROM lh_silver.energia.produccion);
+        DECLARE @silver BIGINT = (SELECT COUNT(*) FROM lh_silver.energia.produccion_pozo);
         DECLARE @fact   BIGINT = (SELECT COUNT(*) FROM fact.produccion_mensual);
         IF @fact <> @silver
             THROW 50001, 'gold: fact.produccion_mensual no tiene las mismas filas que silver (un mes sin tramo o con dos).', 1;
