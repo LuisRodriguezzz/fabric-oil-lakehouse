@@ -751,8 +751,14 @@ library (D26), cuando gold empezó a leer silver por SQL.
   es más simple pero informa "cambió todo el año" y deja sin incremental a las capas de abajo. CDF
   prendido para las materialized lake views.
 - **Cómo quedó construido:**
-  - Bronze agrega `_fuente` (el recurso: `produccion_pozo_2006`) y particiona `produccion_pozo` por
-    `_fuente`, así silver lee la foto de un año sin recorrer los otros 20.
+  - Bronze agrega `_fuente` (el recurso: `produccion_pozo_2006`) y le pone **liquid clustering**
+    por `_fuente` (con estadísticas en esa columna, que por estar al final no las tendría), así
+    silver lee la foto de un año sin recorrer los otros 20. Alternativa descartada: particionar.
+    La doc de Fabric dice "avoid partitioning by default", pide al menos 1 GB por partición y
+    desde el Runtime 2.0 recomienda liquid clustering para lecturas; la partición queda para
+    aislar escritores concurrentes ([partitioning](https://learn.microsoft.com/en-us/fabric/data-engineering/delta-lake-partitioning),
+    [liquid clustering](https://learn.microsoft.com/en-us/fabric/data-engineering/liquid-clustering)).
+    Los archivos se agrupan con OPTIMIZE: va con el mantenimiento de bronze (retención).
   - El stream de silver solo avisa **qué años llegaron**; la foto se lee entera de bronze. Así, si
     un archivo quedara partido en dos tandas o llegara tarde una foto vieja, el resultado no cambia.
   - `_huella` (hash de los datos sin linaje): el `MERGE` actualiza solo si cambió el dato.

@@ -422,7 +422,7 @@ if __name__ == "__main__":
             if not fuentes:
                 return
             # La tanda solo avisa qué años llegaron. La foto se lee entera de bronze, filtrada por
-            # la partición: aunque el stream partiera un archivo en dos tandas, cada año se aplica
+            # `_fuente` (bronze agrupa por esa columna): aunque el stream partiera un archivo en dos tandas, cada año se aplica
             # completo, y si llegó una foto vieja tarde, no le gana a la más nueva.
             bronze = spark.read.format("delta").load(origen).filter(F.col("_fuente").isin(fuentes))  # noqa: F821
             validada = validar(bronze, contrato).persist()
