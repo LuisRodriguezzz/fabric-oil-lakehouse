@@ -6,7 +6,7 @@
         "typeProperties": {
           "source": {
             "type": "FabricSqlDatabaseSource",
-            "sqlReaderQuery": "SELECT fuente, recurso_ckan, ultima_version, ultimo_tamano FROM control.fuente_a_revisar;",
+            "sqlReaderQuery": "SELECT fuente, recurso_ckan, dataset, ultima_version, ultimo_tamano FROM control.fuente_a_revisar;",
             "partitionOption": "None",
             "queryTimeout": "02:00:00"
           },
@@ -113,7 +113,7 @@
                       "sink": {
                         "type": "BinarySink",
                         "storeSettings": {
-                          "type": "LakehouseWriteSettings"
+                          "type": "AzureBlobStorageWriteSettings"
                         },
                         "datasetSettings": {
                           "type": "Binary",
@@ -121,7 +121,7 @@
                             "location": {
                               "type": "LakehouseLocation",
                               "folderPath": {
-                                "value": "@concat('landing/', item().fuente, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'))",
+                                "value": "@concat('landing/', item().dataset, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'))",
                                 "type": "Expression"
                               },
                               "fileName": {
@@ -164,7 +164,7 @@
                       "storedProcedureParameters": {
                         "archivo": {
                           "value": {
-                            "value": "@concat('landing/', item().fuente, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'), '/', item().fuente, '_', formatDateTime(activity('Version').output.result.last_modified, 'yyyyMMddTHHmmss'), '_', string(activity('Version').output.result.size), '.csv')",
+                            "value": "@concat('landing/', item().dataset, '/ingest_date=', formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd'), '/', item().fuente, '_', formatDateTime(activity('Version').output.result.last_modified, 'yyyyMMddTHHmmss'), '_', string(activity('Version').output.result.size), '.csv')",
                             "type": "Expression"
                           },
                           "type": "String"
