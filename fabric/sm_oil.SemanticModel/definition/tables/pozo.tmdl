@@ -1,0 +1,148 @@
+table pozo
+	lineageTag: 3d928b1f-e7f0-4795-8b72-348d5a541aff
+	sourceLineageTag: [dim].[pozo]
+
+	column pozo_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 532c3df2-9f87-485c-925d-46be8f6aa89e
+		sourceLineageTag: pozo_key
+		summarizeBy: none
+		sourceColumn: pozo_key
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column idpozo
+		dataType: int64
+		formatString: 0
+		lineageTag: 2aafd933-c2da-42af-9f24-a98796214123
+		sourceLineageTag: idpozo
+		summarizeBy: none
+		sourceColumn: idpozo
+
+		annotation SummarizationSetBy = Automatic
+
+	column vigente_desde
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: afe618c3-81d2-4e0b-a7db-12dc399a2fcb
+		sourceLineageTag: vigente_desde
+		summarizeBy: none
+		sourceColumn: vigente_desde
+
+		annotation SummarizationSetBy = Automatic
+
+	column vigente_hasta
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 1c736070-58a6-4f89-a93e-9b9706e497e3
+		sourceLineageTag: vigente_hasta
+		summarizeBy: none
+		sourceColumn: vigente_hasta
+
+		annotation SummarizationSetBy = Automatic
+
+	column es_actual
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: f0c2f02f-4046-42b4-b378-ed9ac138fd06
+		sourceLineageTag: es_actual
+		summarizeBy: none
+		sourceColumn: es_actual
+
+		annotation SummarizationSetBy = Automatic
+
+	column sigla
+		dataType: string
+		lineageTag: 28a5309e-c527-4fd9-917e-10a382174b12
+		sourceLineageTag: sigla
+		summarizeBy: none
+		sourceColumn: sigla
+
+		annotation SummarizationSetBy = Automatic
+
+	column tipoestado
+		dataType: string
+		lineageTag: 486dcefa-a37e-4aab-8838-b77d62748024
+		sourceLineageTag: tipoestado
+		summarizeBy: none
+		sourceColumn: tipoestado
+
+		annotation SummarizationSetBy = Automatic
+
+	column tipopozo
+		dataType: string
+		lineageTag: 9e24e420-56e2-4ab9-9816-53a7dff50d68
+		sourceLineageTag: tipopozo
+		summarizeBy: none
+		sourceColumn: tipopozo
+
+		annotation SummarizationSetBy = Automatic
+
+	column tipoextraccion
+		dataType: string
+		lineageTag: 04ed117e-dafe-456b-ae6d-97f8d236e483
+		sourceLineageTag: tipoextraccion
+		summarizeBy: none
+		sourceColumn: tipoextraccion
+
+		annotation SummarizationSetBy = Automatic
+
+	column tipo_de_recurso
+		dataType: string
+		lineageTag: 1f7a137d-2419-4418-8ce0-cf83b23da43b
+		sourceLineageTag: tipo_de_recurso
+		summarizeBy: none
+		sourceColumn: tipo_de_recurso
+
+		annotation SummarizationSetBy = Automatic
+
+	column sub_tipo_recurso
+		dataType: string
+		lineageTag: 9e601871-53b0-4e89-aed7-18c7b1065df1
+		sourceLineageTag: sub_tipo_recurso
+		summarizeBy: none
+		sourceColumn: sub_tipo_recurso
+
+		annotation SummarizationSetBy = Automatic
+
+	column formacion
+		dataType: string
+		lineageTag: 5a586413-99a7-428b-8874-ac439100f6c2
+		sourceLineageTag: formacion
+		summarizeBy: none
+		sourceColumn: formacion
+
+		annotation SummarizationSetBy = Automatic
+
+	column profundidad
+		dataType: double
+		lineageTag: e7cf93a7-fd43-4770-a021-d635feb58474
+		sourceLineageTag: profundidad
+		summarizeBy: none
+		sourceColumn: profundidad
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column primera_produccion
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: a9440705-2a94-4cf9-868a-f527c1aec943
+		sourceLineageTag: primera_produccion
+		summarizeBy: none
+		sourceColumn: primera_produccion
+
+		annotation SummarizationSetBy = Automatic
+
+	partition pozo = entity
+		mode: directLake
+		source
+			entityName: pozo
+			schemaName: dim
+			expressionSource: 'DirectLake - wh_gold'
+

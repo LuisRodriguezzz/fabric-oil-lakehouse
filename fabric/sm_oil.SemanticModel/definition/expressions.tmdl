@@ -1,0 +1,15 @@
+expression 'DirectLake - wh_gold' =
+		let
+		    Source = AzureStorage.DataLake("https://onelake.dfs.fabric.microsoft.com/" & WorkspaceId & "/" & WarehouseId, [HierarchicalNavigation=true])
+		in
+		    Source
+	lineageTag: d1a0cb2b-e21d-445f-bc26-0a7e5715c851
+
+	annotation PBI_IncludeFutureArtifacts = False
+
+expression WorkspaceId = "1d391b11-a1b8-49c4-969c-eea67f731728" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: d38ac3c2-48ce-4c06-a9fc-e389af9b241c
+
+expression WarehouseId = "e5cd7adc-81db-4583-8e77-ffbae3da04e1" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: 6b3858cf-8245-479b-865a-5746496eccee
+

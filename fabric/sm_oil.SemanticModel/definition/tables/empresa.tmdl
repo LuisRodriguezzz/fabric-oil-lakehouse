@@ -1,0 +1,42 @@
+table empresa
+	lineageTag: 2fd84584-08aa-4c84-a156-c708d374102c
+	sourceLineageTag: [dim].[empresa]
+
+	column empresa_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 4a3dabc6-f1f7-4e86-9a40-7042236b8219
+		sourceLineageTag: empresa_key
+		summarizeBy: none
+		sourceColumn: empresa_key
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column idempresa
+		dataType: string
+		lineageTag: 38e3f202-ddab-45ca-b75d-0d46a0b72d1e
+		sourceLineageTag: idempresa
+		summarizeBy: none
+		sourceColumn: idempresa
+
+		annotation SummarizationSetBy = Automatic
+
+	column empresa
+		dataType: string
+		lineageTag: dae80673-ddbc-4ea4-95aa-4bfbb9b67370
+		sourceLineageTag: empresa
+		summarizeBy: none
+		sourceColumn: empresa
+
+		annotation SummarizationSetBy = Automatic
+
+	partition empresa = entity
+		mode: directLake
+		source
+			entityName: empresa
+			schemaName: dim
+			expressionSource: 'DirectLake - wh_gold'
+
