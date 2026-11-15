@@ -264,7 +264,7 @@
           "sessionTag": "ingesta"
         },
         "policy": {
-          "timeout": "0.00:30:00",
+          "timeout": "0.02:00:00",
           "retry": 1,
           "retryIntervalInSeconds": 60,
           "secureInput": false,
@@ -288,7 +288,7 @@
           "sessionTag": "ingesta"
         },
         "policy": {
-          "timeout": "0.00:30:00",
+          "timeout": "0.02:00:00",
           "retry": 1,
           "retryIntervalInSeconds": 120,
           "secureInput": false,
@@ -355,7 +355,7 @@
           }
         },
         "policy": {
-          "timeout": "0.00:30:00",
+          "timeout": "0.01:00:00",
           "retry": 2,
           "retryIntervalInSeconds": 60,
           "secureInput": false,
