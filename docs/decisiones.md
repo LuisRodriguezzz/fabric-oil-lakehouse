@@ -683,3 +683,46 @@ library (D26), cuando gold empezó a leer silver por SQL.
     propios.
 - **En Azure:** un modelo de Azure Analysis Services, o de Power BI Premium en Import o DirectQuery
   sobre Synapse. Es una equivalencia general: la doc de Fabric no la compara.
+
+### D30. Reporte `rpt_oil`: PBIR armado por código, con estilo editorial
+
+- **Cómo se armó:** Fabric creó un reporte vacío sobre `sm_oil`, y a esa base se le agregaron por
+  la API una página (1280×720), 10 visuales y un tema propio (`EditorialOil.json` en
+  `RegisteredResources`). Se partió de una base real porque la doc no documenta los nombres
+  internos de cada tipo de visual (verificado: PBIR es GA y es el formato por defecto,
+  [projects-report](https://learn.microsoft.com/en-us/power-bi/developer/projects/projects-report)).
+- **Estilo:** títulos en Georgia, textos y ejes en Segoe UI y grises, azul tinta `#2B5C8A` como
+  único color de datos, sin bordes ni sombras y con grillas punteadas. Los títulos dicen algo, como
+  en un artículo.
+- **Contenido:** título y bajada; tarjetas de petróleo, gas y pozos que declararon; la evolución
+  mensual del petróleo; el petróleo por cuenca; filtros de empresa y año; y la fuente al pie.
+- **El título dice lo que muestran los datos:** "El petróleo no convencional en Argentina". La
+  fuente de producción de hoy es la no convencional (la cuenca Neuquina tiene el 99,7 %); la
+  producción completa es la fase 3.
+- **"(Blank)" en los filtros:** no había datos vacíos ni filas huérfanas (verificado con DAX). Era
+  la fila "desconocida" que el motor agrega a una dimensión por si el fact trae claves sin pareja.
+  Se prendió *Assume referential integrity* en las 4 relaciones, porque gold la garantiza: claves
+  `NOT NULL`, un *join* que exige el tramo del pozo, filas `-1` y el control de filas del fact
+  ([relationships troubleshooting](https://learn.microsoft.com/en-us/power-bi/guidance/relationships-troubleshoot)).
+  Con esa opción, una fila huérfana desaparecería en silencio: la responsabilidad pasa a gold.
+- **Ambientes:** en Git, el reporte apunta al modelo por ruta (`byPath: ../sm_oil.SemanticModel`);
+  `dp-oil` lo enlazó solo al `sm_oil` de prod. No necesita regla.
+- **Probado (15/11):** `dp-oil` desplegó el reporte PBIR a prod, aunque la doc de deployment
+  pipelines dice "PBIR reports aren't supported".
+- **En Azure:** un reporte de Power BI sobre Azure Analysis Services, publicado con su archivo PBIX.
+
+### D31. Los items del workspace se ordenan en carpetas por capa
+
+- **Qué:** `00_control`, `01_ingesta`, `02_bronze`, `03_silver`, `04_gold` y `05_consumo`. Los
+  números mantienen el orden del flujo.
+- **Cómo viaja:** Git refleja las carpetas del workspace como subcarpetas de `fabric/` (verificado,
+  [git-integration-process](https://learn.microsoft.com/en-us/fabric/cicd/git-integration/git-integration-process)).
+  Los deployment pipelines crean la carpeta en el destino y mueven el item emparejado
+  ([deployment process](https://learn.microsoft.com/en-us/fabric/cicd/deployment-pipelines/understand-the-deployment-process));
+  una parte de eso figura como preview o como función de la interfaz nueva.
+- **Lo que hubo que tocar:** el test de silver buscaba el notebook en una ruta fija; ahora lo busca
+  dentro de `fabric/`, esté en la carpeta que esté.
+- **Un PR aparte**, porque mover carpetas toca todos los items: si algo sale mal, se vuelve atrás
+  sin arrastrar otros cambios.
+- **Pendiente:** confirmar en la fase 2 que `fabric-cicd` publica items que están en subcarpetas.
+- **En Azure:** las carpetas de Data Factory y de Synapse, que también se guardan en Git.

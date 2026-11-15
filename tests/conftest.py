@@ -11,7 +11,9 @@ from pathlib import Path
 import pytest
 from pyspark.sql import SparkSession
 
-NOTEBOOK = Path(__file__).resolve().parents[1] / "fabric" / "nb_silver.Notebook" / "notebook-content.py"
+# El notebook se busca dentro de fabric/ esté en la carpeta que esté: el workspace se ordena en
+# carpetas y Git las refleja como subcarpetas (D31).
+NOTEBOOK = next((Path(__file__).resolve().parents[1] / "fabric").glob("**/nb_silver.Notebook/notebook-content.py"))
 
 
 def _cargar_silver():

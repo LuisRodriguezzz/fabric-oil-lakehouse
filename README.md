@@ -24,18 +24,24 @@ Las decisiones, con su porqué y su equivalente en Azure, están en
 ## Estructura
 
 ```
-docs/decisiones.md   decisiones numeradas (D1 a D29), cada una con su equivalente en Azure
-fabric/              items de Fabric (integración de Git; oil-dev en main, oil-feat en ramas)
-  lh_bronze.Lakehouse/   landing (Files) y tablas de texto de bronze (schema energia)
-  lh_silver.Lakehouse/   silver (F3)
-  nb_bronze.Notebook/    landing → tablas Delta: cada archivo una vez, leído por su encabezado
-  nb_silver.Notebook/    bronze → silver: contrato, cuarentena y control de calidad (F3)
-  pl_ingesta.DataPipeline/   portal → landing con watermark, bronze, silver, refresco y gold
-  vl_oil.VariableLibrary/    lo que cambia por ambiente: SQL endpoint, warehouse y host (D26, D28)
-  wh_gold.Warehouse/         gold: estrella en schemas dim y fact, carga en carga.cargar_gold (D27)
-  sm_oil.SemanticModel/      modelo Direct Lake on OneLake sobre wh_gold, con medidas (D29)
-  sqldb_control.SQLDatabase/ fuentes y versiones cargadas, como proyecto SQL (F2); las
-                             fuentes viajan en un script post-deployment (D24)
+docs/decisiones.md   decisiones numeradas (D1 a D31), cada una con su equivalente en Azure
+fabric/              items de Fabric, en carpetas del workspace (D31; oil-dev en main, oil-feat en ramas)
+  00_control/
+    sqldb_control.SQLDatabase/ fuentes y versiones cargadas (F2); las fuentes, en un script post-deployment (D24)
+    vl_oil.VariableLibrary/    lo que cambia por ambiente: SQL endpoint, warehouse y host (D26, D28)
+  01_ingesta/
+    pl_ingesta.DataPipeline/   portal → landing con watermark, bronze, silver, refresco y gold
+  02_bronze/
+    lh_bronze.Lakehouse/       landing (Files) y tablas de texto de bronze (schema energia)
+    nb_bronze.Notebook/        landing → tablas Delta: cada archivo una vez, leído por su encabezado
+  03_silver/
+    lh_silver.Lakehouse/       silver (F3)
+    nb_silver.Notebook/        bronze → silver: contrato, cuarentena y control de calidad (F3)
+  04_gold/
+    wh_gold.Warehouse/         gold: estrella en schemas dim y fact, carga en carga.cargar_gold (D27)
+  05_consumo/
+    sm_oil.SemanticModel/      modelo Direct Lake on OneLake sobre wh_gold, con medidas (D29)
+    rpt_oil.Report/            reporte de Power BI en formato PBIR, estilo editorial (D30)
   parameter.yml          valores por ambiente para fabric-cicd (D20)
 tests/               pytest de silver (.github/workflows/pruebas.yml)
 .github/workflows/desplegar.yml   CD a oil-prod con fabric-cicd y OIDC (solo a mano hasta la fase 2)
