@@ -1,0 +1,74 @@
+{
+  "name": "Editorial oil",
+  "dataColors": [
+    "#2B5C8A",
+    "#C8553D",
+    "#8A8A8A",
+    "#C9A227",
+    "#4E7D5B",
+    "#6B4C8A",
+    "#B8B8B8",
+    "#3D3D3D"
+  ],
+  "foreground": "#121212",
+  "foregroundNeutralSecondary": "#5A5A5A",
+  "background": "#FFFFFF",
+  "tableAccent": "#2B5C8A",
+  "textClasses": {
+    "callout": {
+      "fontSize": 30,
+      "fontFace": "Georgia",
+      "color": "#121212"
+    },
+    "title": {
+      "fontSize": 13,
+      "fontFace": "Georgia",
+      "color": "#121212"
+    },
+    "header": {
+      "fontSize": 11,
+      "fontFace": "Segoe UI Semibold",
+      "color": "#121212"
+    },
+    "label": {
+      "fontSize": 10,
+      "fontFace": "Segoe UI",
+      "color": "#5A5A5A"
+    }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "border": [
+          {
+            "show": false
+          }
+        ],
+        "dropShadow": [
+          {
+            "show": false
+          }
+        ],
+        "background": [
+          {
+            "show": false
+          }
+        ]
+      }
+    },
+    "page": {
+      "*": {
+        "background": [
+          {
+            "color": {
+              "solid": {
+                "color": "#FFFFFF"
+              }
+            },
+            "transparency": 0
+          }
+        ]
+      }
+    }
+  }
+}
