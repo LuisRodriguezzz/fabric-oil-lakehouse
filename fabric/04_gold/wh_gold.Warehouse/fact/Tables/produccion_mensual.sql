@@ -9,7 +9,8 @@ CREATE TABLE [fact].[produccion_mensual] (
     [iny_agua]       FLOAT (53) NULL,
     [iny_gas]        FLOAT (53) NULL,
     [tef]            FLOAT (53) NULL,
-    [edad_meses]     INT        NULL
+    [edad_meses]     INT        NULL,
+    [estado_key]     BIGINT     NULL
 );
 
 

@@ -818,3 +818,25 @@ library (D26), cuando gold empezó a leer silver por SQL.
 - **Lo que sigue:** cruzar fractura con producción (la curva por pozo según su fractura) es el
   primer candidato a materialized lake view.
 - **En Azure:** ADF con Copy diario a ADLS y un notebook de Databricks o Synapse que reemplaza la tabla.
+
+### D34. `tipoestado` sale del SCD2 de `dim.pozo` y pasa a una mini-dimensión `dim.estado`
+
+- **Problema medido (15/11, gold de dev):** `dim.pozo` tenía 528.987 tramos para 85.919 pozos
+  (6,2 por pozo; hasta 65). `tipoestado` participaba en el 84 % de los cambios de tramo y era lo
+  único que cambiaba en el 66 %: los pozos pasan de "Extracción Efectiva" a "Parado
+  Transitoriamente" y vuelven, mes a mes.
+- **Criterio:** un SCD2 es para atributos que describen al pozo y cambian poco (formación,
+  sistema de extracción, destino). El estado del mes es un dato del hecho. Va en una mini-dimensión
+  (Kimball) colgada del fact: `dim.estado` (unos 17 valores) y `fact.produccion_mensual.estado_key`.
+  Alternativas descartadas: dejarlo (la dimensión crece casi como el hecho) o tirarlo (se pierde
+  "cuántos pozos estaban parados").
+- **Estimado:** de 6,2 a unos 2,7 tramos por pozo; los que quedan son cambios reales de
+  `tipoextraccion` y `tipopozo`.
+- **La columna queda vacía, no se borra:** Git y deployment pipelines del Warehouse (preview)
+  despliegan con `BlockOnPossibleDataLoss=true`, así que borrar una columna de una tabla con datos
+  queda bloqueado ([T-SQL surface area](https://learn.microsoft.com/en-us/fabric/data-warehouse/tsql-surface-area),
+  [git](https://learn.microsoft.com/en-us/fabric/data-warehouse/git-integration)). La carga la deja
+  en NULL; se borra cuando haya otra forma de desplegar (fase 2) o a mano con OK.
+- **En dos PR:** primero gold (tabla, columna y carga); después el modelo semántico (tabla `estado`
+  y su relación), cuando `dim.estado` ya exista en dev, porque el modelo de feat lee el gold de dev.
+- **En Azure:** el mismo modelado de Kimball en Synapse dedicated SQL pool.

@@ -32,6 +32,21 @@ BEGIN
             VALUES (-1, 'N/D', 'Sin dato', 'Sin dato', 'Sin dato');
             SET IDENTITY_INSERT dim.yacimiento OFF;
         END;
+        IF NOT EXISTS (SELECT 1 FROM dim.estado WHERE estado_key = -1)
+        BEGIN
+            SET IDENTITY_INSERT dim.estado ON;
+            INSERT INTO dim.estado (estado_key, tipoestado) VALUES (-1, 'Sin dato');
+            SET IDENTITY_INSERT dim.estado OFF;
+        END;
+
+        -- 3b. dim.estado: el estado del pozo en el mes (Extracción Efectiva, Parado Transitoriamente...).
+        --     Es una mini-dimensión: cambia casi todos los meses, así que cuelga del fact y no del
+        --     SCD2 de dim.pozo, donde abría un tramo por cada parada (D34).
+        INSERT INTO dim.estado (tipoestado)
+        SELECT DISTINCT s.tipoestado
+        FROM lh_silver.energia.produccion_pozo AS s
+        WHERE s.tipoestado IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM dim.estado AS d WHERE d.tipoestado = s.tipoestado);
 
         -- 3. dim.empresa (SCD tipo 1): el nombre más reciente de cada idempresa.
         MERGE dim.empresa AS d
@@ -69,11 +84,13 @@ BEGIN
 
         -- 5. dim.pozo (SCD tipo 2): tramos recalculados desde la historia de silver, sincronizados por
         --    (idpozo, vigente_desde). Así entra una rectificación de un mes viejo.
+        --    tipoestado ya no abre tramos (pasó a dim.estado) y queda en NULL: Git del Warehouse no
+        --    deja borrar una columna de una tabla con datos (BlockOnPossibleDataLoss). D34.
         WITH historia AS (
             SELECT idpozo, DATEFROMPARTS(anio, mes, 1) AS mes_declarado,
-                   sigla, tipoestado, tipopozo, tipoextraccion, tipo_de_recurso, sub_tipo_recurso,
+                   sigla, tipopozo, tipoextraccion, tipo_de_recurso, sub_tipo_recurso,
                    formacion, profundidad, prod_pet, prod_gas,
-                   CONCAT(sigla, '|', tipoestado, '|', tipopozo, '|', tipoextraccion, '|', tipo_de_recurso,
+                   CONCAT(sigla, '|', tipopozo, '|', tipoextraccion, '|', tipo_de_recurso,
                           '|', sub_tipo_recurso, '|', formacion, '|', CAST(profundidad AS VARCHAR(50))) AS huella
             FROM lh_silver.energia.produccion_pozo
         ),
@@ -89,7 +106,7 @@ BEGIN
         ),
         tramos AS (
             SELECT idpozo, n_tramo, MIN(mes_declarado) AS vigente_desde,
-                   MAX(sigla) AS sigla, MAX(tipoestado) AS tipoestado, MAX(tipopozo) AS tipopozo,
+                   MAX(sigla) AS sigla, MAX(tipopozo) AS tipopozo,
                    MAX(tipoextraccion) AS tipoextraccion, MAX(tipo_de_recurso) AS tipo_de_recurso,
                    MAX(sub_tipo_recurso) AS sub_tipo_recurso, MAX(formacion) AS formacion,
                    MAX(profundidad) AS profundidad
@@ -109,7 +126,7 @@ BEGIN
                        AS vigente_hasta,
                    CASE WHEN LEAD(t.vigente_desde) OVER (PARTITION BY t.idpozo ORDER BY t.vigente_desde) IS NULL
                         THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS es_actual,
-                   t.sigla, t.tipoestado, t.tipopozo, t.tipoextraccion, t.tipo_de_recurso,
+                   t.sigla, t.tipopozo, t.tipoextraccion, t.tipo_de_recurso,
                    t.sub_tipo_recurso, t.formacion, t.profundidad, p.primera_produccion
             FROM tramos t
             JOIN primera p ON p.idpozo = t.idpozo
@@ -121,12 +138,13 @@ BEGIN
                  ISNULL(d.vigente_hasta, '9999-12-31') <> ISNULL(s.vigente_hasta, '9999-12-31')
               OR d.es_actual <> s.es_actual
               OR ISNULL(d.primera_produccion, '1900-01-01') <> ISNULL(s.primera_produccion, '1900-01-01')
-              OR CONCAT(d.sigla, '|', d.tipoestado, '|', d.tipopozo, '|', d.tipoextraccion, '|', d.tipo_de_recurso,
+              OR d.tipoestado IS NOT NULL
+              OR CONCAT(d.sigla, '|', d.tipopozo, '|', d.tipoextraccion, '|', d.tipo_de_recurso,
                         '|', d.sub_tipo_recurso, '|', d.formacion, '|', CAST(d.profundidad AS VARCHAR(50)))
-              <> CONCAT(s.sigla, '|', s.tipoestado, '|', s.tipopozo, '|', s.tipoextraccion, '|', s.tipo_de_recurso,
+              <> CONCAT(s.sigla, '|', s.tipopozo, '|', s.tipoextraccion, '|', s.tipo_de_recurso,
                         '|', s.sub_tipo_recurso, '|', s.formacion, '|', CAST(s.profundidad AS VARCHAR(50))))
             THEN UPDATE SET vigente_hasta = s.vigente_hasta, es_actual = s.es_actual,
-                            sigla = s.sigla, tipoestado = s.tipoestado, tipopozo = s.tipopozo,
+                            sigla = s.sigla, tipoestado = NULL, tipopozo = s.tipopozo,
                             tipoextraccion = s.tipoextraccion, tipo_de_recurso = s.tipo_de_recurso,
                             sub_tipo_recurso = s.sub_tipo_recurso, formacion = s.formacion,
                             profundidad = s.profundidad, primera_produccion = s.primera_produccion
@@ -134,7 +152,7 @@ BEGIN
             THEN INSERT (idpozo, vigente_desde, vigente_hasta, es_actual, sigla, tipoestado, tipopozo,
                          tipoextraccion, tipo_de_recurso, sub_tipo_recurso, formacion, profundidad,
                          primera_produccion)
-                 VALUES (s.idpozo, s.vigente_desde, s.vigente_hasta, s.es_actual, s.sigla, s.tipoestado,
+                 VALUES (s.idpozo, s.vigente_desde, s.vigente_hasta, s.es_actual, s.sigla, NULL,
                          s.tipopozo, s.tipoextraccion, s.tipo_de_recurso, s.sub_tipo_recurso, s.formacion,
                          s.profundidad, s.primera_produccion)
         WHEN NOT MATCHED BY SOURCE
@@ -143,20 +161,23 @@ BEGIN
         -- 6. fact.produccion_mensual: se reescribe entera; cada mes va al tramo vigente del pozo.
         TRUNCATE TABLE fact.produccion_mensual;
         INSERT INTO fact.produccion_mensual (fecha_key, pozo_key, empresa_key, yacimiento_key,
-                                             prod_pet, prod_gas, prod_agua, iny_agua, iny_gas, tef, edad_meses)
+                                             prod_pet, prod_gas, prod_agua, iny_agua, iny_gas, tef, edad_meses,
+                                             estado_key)
         SELECT s.anio * 100 + s.mes,
                p.pozo_key,
                ISNULL(e.empresa_key, -1),
                ISNULL(y.yacimiento_key, -1),
                s.prod_pet, s.prod_gas, s.prod_agua, s.iny_agua, s.iny_gas, s.tef,
-               DATEDIFF(MONTH, p.primera_produccion, DATEFROMPARTS(s.anio, s.mes, 1))
+               DATEDIFF(MONTH, p.primera_produccion, DATEFROMPARTS(s.anio, s.mes, 1)),
+               ISNULL(st.estado_key, -1)
         FROM lh_silver.energia.produccion_pozo AS s
         JOIN dim.pozo AS p
           ON p.idpozo = s.idpozo
          AND DATEFROMPARTS(s.anio, s.mes, 1) >= p.vigente_desde
          AND (p.vigente_hasta IS NULL OR DATEFROMPARTS(s.anio, s.mes, 1) <= p.vigente_hasta)
         LEFT JOIN dim.empresa AS e ON e.idempresa = s.idempresa
-        LEFT JOIN dim.yacimiento AS y ON y.idareayacimiento = s.idareayacimiento;
+        LEFT JOIN dim.yacimiento AS y ON y.idareayacimiento = s.idareayacimiento
+        LEFT JOIN dim.estado AS st ON st.tipoestado = s.tipoestado;
 
         -- 7. Controles antes de publicar: si alguno falla, THROW -> ROLLBACK y gold queda como estaba.
         DECLARE @silver BIGINT = (SELECT COUNT(*) FROM lh_silver.energia.produccion_pozo);
