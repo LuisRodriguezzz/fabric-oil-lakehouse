@@ -14,7 +14,7 @@
 # # Bronze: cada entrega de landing, tal como llegó, en una tabla Delta
 # - **Lee** `lh_bronze/Files/landing/<fuente>/ingest_date=AAAA-MM-DD/<archivo>.csv`.
 # - **Escribe** `lh_bronze.energia.<fuente>` (`Tables/energia/<fuente>`): todas las columnas como
-#   texto, más el linaje (`_archivo`, `ingest_date`, `_cargado_en`). El schema `energia` es el
+#   texto, más el linaje (`_archivo`, `ingest_date`, `_version_origen`, `_cargado_en`). El schema `energia` es el
 #   sistema de origen: el portal de la Secretaría de Energía.
 # - **Acepta todo, sin mezclar columnas:** cada archivo se lee con su propio encabezado, así las
 #   columnas se asignan por nombre. Una columna nueva se suma a la tabla (las filas anteriores
@@ -36,7 +36,9 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import BinaryType, LongType, StringType, StructField, StructType, TimestampType
 
-FUENTES = ("produccion", "padron")
+# Datasets: carpetas de landing y tablas de bronze. produccion_pozo junta los 21 años (D32);
+# produccion (solo no convencional) quedó apagada y su tabla no recibe más archivos.
+FUENTES = ("produccion_pozo", "padron")
 SCHEMA = "energia"
 
 # El workspace donde corre el notebook: oil-dev o oil-prod. Así no hay IDs fijos en el código.
@@ -46,6 +48,9 @@ BRONZE = f"abfss://{WORKSPACE}@onelake.dfs.fabric.microsoft.com/lh_bronze.Lakeho
 # Marca de orden de bytes que traen algunos CSV del portal pegada a la primera columna.
 BOM = "﻿"
 FECHA_DE_INGESTA = re.compile(r"/ingest_date=(\d{4}-\d{2}-\d{2})/")
+# El pipeline nombra cada archivo <fuente>_<última modificación en el portal>_<tamaño>.csv.
+# Esa fecha es la versión del origen: con ella silver elige la foto más nueva de cada año (D32).
+VERSION_DE_ORIGEN = re.compile(r"_(\d{8}T\d{6})_\d+\.csv$")
 
 # Un stream necesita el esquema por adelantado; este es el fijo del lector binaryFile.
 ARCHIVOS = StructType([
@@ -75,9 +80,11 @@ def leer_archivo(ruta: str) -> DataFrame:
     datos = spark.read.option("header", True).csv(ruta)  # noqa: F821  (sin inferSchema: texto)
     datos = datos.toDF(*[c.lstrip(BOM).strip() for c in datos.columns])
     fecha = FECHA_DE_INGESTA.search(ruta)
+    version = VERSION_DE_ORIGEN.search(ruta)
     return (
         datos.withColumn("_archivo", F.lit(ruta))
         .withColumn("ingest_date", F.lit(fecha.group(1) if fecha else None))
+        .withColumn("_version_origen", F.lit(version.group(1) if version else None))
         .withColumn("_cargado_en", F.current_timestamp())
     )
 
