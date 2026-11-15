@@ -24,7 +24,7 @@ Las decisiones, con su porqué y su equivalente en Azure, están en
 ## Estructura
 
 ```
-docs/decisiones.md   decisiones numeradas (D1 a D28), cada una con su equivalente en Azure
+docs/decisiones.md   decisiones numeradas (D1 a D29), cada una con su equivalente en Azure
 fabric/              items de Fabric (integración de Git; oil-dev en main, oil-feat en ramas)
   lh_bronze.Lakehouse/   landing (Files) y tablas de texto de bronze (schema energia)
   lh_silver.Lakehouse/   silver (F3)
@@ -33,6 +33,7 @@ fabric/              items de Fabric (integración de Git; oil-dev en main, oil-
   pl_ingesta.DataPipeline/   portal → landing con watermark, bronze, silver, refresco y gold
   vl_oil.VariableLibrary/    lo que cambia por ambiente: SQL endpoint, warehouse y host (D26, D28)
   wh_gold.Warehouse/         gold: estrella en schemas dim y fact, carga en carga.cargar_gold (D27)
+  sm_oil.SemanticModel/      modelo Direct Lake on OneLake sobre wh_gold, con medidas (D29)
   sqldb_control.SQLDatabase/ fuentes y versiones cargadas, como proyecto SQL (F2); las
                              fuentes viajan en un script post-deployment (D24)
   parameter.yml          valores por ambiente para fabric-cicd (D20)
