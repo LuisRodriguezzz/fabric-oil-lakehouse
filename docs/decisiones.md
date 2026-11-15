@@ -767,7 +767,13 @@ library (D26), cuando gold empezó a leer silver por SQL.
     repite, y el `MERGE` de los años que pasaron da el mismo resultado.
   - Regla nueva `anio_del_archivo`: una fila de otro año que el del archivo va a cuarentena,
     porque rompería el borrado acotado al año.
-  - Gold lee `lh_silver.energia.produccion_pozo`. La tabla `produccion` vieja queda sin uso.
+  - **Gold se cambia en un segundo PR (expandir y después contraer).** Al actualizar el Warehouse
+    desde Git o con `dp-oil`, Fabric compila el proyecto SQL y exige que existan las tablas que el
+    procedimiento lee en otro lakehouse (error SQL71561, "unresolved reference"). Si gold apunta a
+    `produccion_pozo` antes de que silver la cree, el update falla. Orden: PR 1 (control, bronze,
+    silver) → correr el pipeline en cada ambiente, que crea `produccion_pozo` → PR 2 (gold lee
+    `produccion_pozo`) → más adelante, borrar `produccion` con OK. Mientras tanto gold sigue
+    leyendo `produccion`, que queda congelada.
 - **Supuestos:** cada CSV es la foto completa de un año; el portal cambia la fecha cuando cambia el
   archivo; la versión del origen se ordena por tiempo del origen, no por el de proceso
   (`_cargado_en`).
