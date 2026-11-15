@@ -780,6 +780,11 @@ library (D26), cuando gold empezó a leer silver por SQL.
   control (la cuarentena más alta, 2009 con 0,0044 %). AWS midió 18.234.202 filas el 2026-09-12:
   la diferencia son los meses de 2026 publicados después. Pendiente: silver quedó en 200 archivos
   (las particiones por defecto del MERGE); va con el mantenimiento (OPTIMIZE).
+- **Capacidad compartida (15/11):** el backfill de prod falló en Bronze con 430
+  (`TooManyRequestsForCapacity`) porque feat corría Spark al mismo tiempo sobre la misma
+  capacidad de 4 CU. Regla de operación: nada pesado en dev o feat mientras corre prod. Con gold
+  leyendo `produccion_pozo`, la corrida de feat dio fact = silver = 18.408.823 filas y gold tardó
+  1,7 min: gold sigue full.
 - **Supuestos:** cada CSV es la foto completa de un año; el portal cambia la fecha cuando cambia el
   archivo; la versión del origen se ordena por tiempo del origen, no por el de proceso
   (`_cargado_en`).
