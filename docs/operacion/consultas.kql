@@ -1,0 +1,73 @@
+// Consultas de operación sobre el workspace monitoring de oil-prod (D37).
+// Se corren en la base "Monitoring KQL database" (Eventhouse "Monitoring Eventhouse") de oil-prod.
+// Horarios: las tablas guardan UTC. Argentina = UTC-3, así que las 12:00 son las 15:00 UTC.
+// ItemJobEventLogs guarda un evento por cambio de estado de cada job: para quedarse con el
+// estado final se toma el último evento de cada JobInstanceId (arg_max).
+
+
+// 1. Chequeo diario (runbook): ¿cómo terminó la última corrida programada de pl_ingesta?
+ItemJobEventLogs
+| where ItemName == "pl_ingesta" and JobInvokeType has "Scheduled"
+| summarize arg_max(Timestamp, *) by JobInstanceId
+| top 1 by JobStartTime desc
+| project inicio_utc = JobStartTime, fin_utc = JobEndTime, JobStatus,
+          duracion_min = round(DurationMs / 60000.0, 1)
+
+
+// 2. Jobs fallidos de cualquier item de prod en los últimos 30 días
+ItemJobEventLogs
+| where Timestamp > ago(30d)
+| summarize arg_max(Timestamp, *) by JobInstanceId
+| where JobStatus =~ "Failed"
+| project inicio_utc = JobStartTime, ItemName, ItemKind, JobType, JobInvokeType
+| order by inicio_utc desc
+
+
+// 3. Actividades de pipeline fallidas, con el error (preview)
+FabricDataPipelinesActivityRunsLogs
+| where Timestamp > ago(7d) and Status =~ "Failed"
+| project inicio_utc = OperationStartTime, ActivityName, ActivityType, FailureType,
+          GatewayType, RetryCount, ErrorCode, error = substring(ErrorMessage, 0, 300)
+| order by inicio_utc desc
+
+
+// 4. SLA semanal de pl_ingesta: corridas programadas, éxito, a tiempo (antes de las 13:00 ART)
+//    y duración típica (p50) y del peor 5 % (p95)
+ItemJobEventLogs
+| where ItemName == "pl_ingesta" and JobInvokeType has "Scheduled"
+| summarize arg_max(Timestamp, *) by JobInstanceId
+| where JobStatus in~ ("Completed", "Failed")
+| summarize corridas = count(),
+            exitosas = countif(JobStatus =~ "Completed"),
+            a_tiempo = countif(JobStatus =~ "Completed" and JobEndTime <= startofday(JobStartTime) + 16h),
+            p50_min = round(percentile(DurationMs, 50) / 60000.0, 1),
+            p95_min = round(percentile(DurationMs, 95) / 60000.0, 1)
+          by semana = startofweek(JobStartTime)
+| extend exito_pct = round(100.0 * exitosas / corridas, 1),
+         a_tiempo_pct = round(100.0 * a_tiempo / corridas, 1)
+| order by semana desc
+
+
+// 5. ¿Dónde se va el tiempo? Duración por actividad en 30 días
+FabricDataPipelinesActivityRunsLogs
+| where Timestamp > ago(30d) and Status =~ "Succeeded"
+| summarize ejecuciones = count(),
+            p50_s = round(percentile(DurationMs, 50) / 1000.0, 0),
+            p95_s = round(percentile(DurationMs, 95) / 1000.0, 0)
+          by ActivityName, ActivityType
+| order by p95_s desc
+
+
+// 6. Corrida lenta: las de los últimos 2 días que tardaron más del doble de la mediana de 30 días
+let mediana_ms = toscalar(
+    ItemJobEventLogs
+    | where ItemName == "pl_ingesta" and Timestamp > ago(30d)
+    | summarize arg_max(Timestamp, *) by JobInstanceId
+    | where JobStatus =~ "Completed"
+    | summarize percentile(DurationMs, 50));
+ItemJobEventLogs
+| where ItemName == "pl_ingesta" and Timestamp > ago(2d)
+| summarize arg_max(Timestamp, *) by JobInstanceId
+| where JobStatus =~ "Completed" and DurationMs > 2 * mediana_ms
+| project inicio_utc = JobStartTime, duracion_min = round(DurationMs / 60000.0, 1),
+          mediana_min = round(mediana_ms / 60000.0, 1)
