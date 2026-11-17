@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: stg_fractura
+    description: Una fila por operación de fractura (Adjunto IV), con nombres cortos y la arena total.
+    columns:
+      - name: id_base_fractura_adjiv
+        description: Clave de la operación de fractura.
+        data_tests:
+          - unique
+          - not_null
+      - name: idpozo
+        description: Pozo fracturado.
+        data_tests:
+          - not_null
+
+  - name: stg_produccion_pozo
+    description: Una fila por pozo y mes, con el mes como fecha y los volúmenes sin vacíos.
+    columns:
+      - name: idpozo
+        data_tests:
+          - not_null
+      - name: mes
+        data_tests:
+          - not_null

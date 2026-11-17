@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: fractura_por_pozo
+    description: Un pozo fracturado por fila, con etapas, arena y agua de todas sus operaciones.
+    columns:
+      - name: idpozo
+        data_tests: [unique, not_null]
+      - name: etapas
+        data_tests: [not_null]
+
+  - name: produccion_primer_anio
+    description: Petróleo y gas de los primeros 12 meses de cada pozo, desde su primer mes productivo.
+    columns:
+      - name: idpozo
+        data_tests: [unique, not_null]
+
+  - name: fractura_vs_produccion
+    description: Pozos fracturados con su producción del primer año, por rango de etapas.
+    columns:
+      - name: idpozo
+        data_tests: [unique, not_null]
