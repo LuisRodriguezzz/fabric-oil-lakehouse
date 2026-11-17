@@ -541,6 +541,7 @@ library (D26), cuando gold empezó a leer silver por SQL.
   La doc habla de *"users or groups"*; el usuario del tenant no tiene buzón (sin mail ni Exchange,
   verificado por Graph) y la dirección de Gmail queda marcada como externa. Que llegue se
   comprueba con la prueba de falla.
+- **Resultado (17/11):** la falla real del 16/11 no llegó al Gmail. Ver la D37.
 - **Primera corrida en prod (13/11, 02:08 UTC, manual):** 8,5 minutos; padrón 1.172.135 bytes y
   producción 148.923.474 bytes (leído = escrito); bronze 431.322 filas de producción y 86.386 de
   padrón; silver 431.319 vigentes y 3 en cuarentena, como dev.
@@ -929,3 +930,72 @@ library (D26), cuando gold empezó a leer silver por SQL.
   [CI/CD con Variable library](https://learn.microsoft.com/en-us/fabric/data-factory/simplify-cicd-for-dbt-jobs),
   [Git del Warehouse](https://learn.microsoft.com/en-us/fabric/data-warehouse/git-integration),
   [dbt-fabricspark](https://docs.getdbt.com/docs/core/connect-data-platform/fabricspark-setup).
+
+## Operación de producción (fase 6)
+
+### D37. Monitoreo de prod: workspace monitoring, Capacity Metrics, chequeo diario y runbook
+
+- **Workspace monitoring en `oil-prod`** (17/11): Workspace settings > Monitoring > *Log
+  workspace activity*. Creó `Monitoring Eventhouse`, `Monitoring KQL database` (solo lectura) y
+  `Monitoring_Eventstream`. Guarda 30 días y no carga historia hacia atrás. Las tablas que usamos
+  son `ItemJobEventLogs` (cada job de cada item: estado, duración, programado o manual) y
+  `FabricDataPipelinesActivityRunsLogs` (cada actividad, **preview**). Consume CU de la misma
+  capacidad; Microsoft recomienda otra capacidad, que acá no hay.
+  - Solo en prod: es lo que se opera, y en dev la corrida se mira a mano. Alternativa descartada:
+    el Monitor hub solo. Sirve para ver una corrida, pero no se consulta ni da un SLA.
+  - La tabla real de actividades trae `ErrorCode`, `ErrorMessage`, `RetryCount` y las entradas y
+    salidas, que la doc no lista (leído con `getschema` el 17/11). Los logs pueden llevar
+    parámetros: consultarla pide rol Contributor o más en el workspace.
+  - Consultas en `docs/operacion/consultas.kql` (chequeo diario, fallas, errores por actividad,
+    SLA semanal, tiempo por actividad, corrida lenta). Validadas contra la base el 17/11, con las
+    tablas todavía vacías: los valores de `JobStatus` y `JobInvokeType` se confirman con las
+    primeras corridas.
+- **Alerta de falla: no hay canal gratuito a un mail externo.** Es la respuesta a la prueba
+  pendiente de la D25: el aviso del schedule del 16/11 no llegó al Gmail.
+  - Lo que propone Fabric es Activator sobre los Job events (`Microsoft.Fabric.JobEvents.ItemJobFailed`),
+    que vigila cualquier item.
+  - Activator no manda mails a direcciones externas, y el usuario del tenant no tiene buzón.
+  - La salida es una *custom action* que dispara un flujo de Power Automate. Se armó
+    (`act_oil` con la regla `pl_ingesta_falla`, flujo con el conector Mail), pero el disparador
+    *When an activator rule is triggered* pide **Power Automate Premium**.
+  - Luis decidió no activar pruebas: la regla queda sin prender y el flujo sin correr.
+  - En su lugar, el **chequeo diario a las 13:00** del runbook.
+  - En una empresa, el usuario tiene buzón o Teams, o la licencia Premium.
+  - Alternativa descartada: un webhook desde `pl_ingesta` (Discord, Telegram o ntfy). Solo cubre
+    ese pipeline y no es la herramienta de Fabric.
+- **Capacity Metrics app** (GA): instalada el 17/11; las credenciales del modelo se cargan a mano
+  (OAuth2, `UTC_offset` −3). Primera lectura:
+  - 9,4 % de uso promedio en 24 horas y 13,3 % en 7 días;
+  - una capacidad con throttling en los últimos 7 días;
+  - 0 rechazos;
+  - 8.170 operaciones correctas y 1 fallida.
+- **El 430 es por núcleos de Spark, no por CU** (verificado):
+  - 1 CU son 2 núcleos (VCores) de Spark. La FTL4 tiene 8 de base, hasta 16 con ráfaga, y una cola de 16 jobs.
+  - El 430 `TooManyRequestsForCapacity` aparece cuando se pide un job de Spark con todos los núcleos ocupados.
+  - La cola cubre los jobs de pipelines, del scheduler y de Spark job definitions. No cubre los notebooks interactivos ni los pedidos por la API pública.
+  - Una SKU más grande sube el límite, pero a 16 veces el costo si es F64. Lo que recomienda la doc para la FTL4 es un pool chico y compartir sesión (D21). En nuestro caso alcanzó con eso y con `threads: 1` en `dbt_mart` (D36).
+- **Throttling** (verificado), según cuánto consumo futuro ya se usó:
+  - hasta 10 minutos, nada;
+  - de 10 a 60, las consultas interactivas esperan 20 segundos;
+  - de 60 minutos a 24 horas, se rechazan las interactivas;
+  - más de 24 horas, se rechaza todo.
+- **Runbook y postmortem:** `docs/operacion/runbook.md` (qué corre, objetivos de servicio,
+  chequeo diario, qué hacer por síntoma, cómo relanzar) y `docs/operacion/postmortem-2026-11-16.md`.
+  El postmortem cubre la primera falla real:
+  - el portal no respondió desde el gateway durante 84 minutos;
+  - la causa queda sin determinar entre el portal y la red de la PC;
+  - la acción pendiente es cortar la corrida antes del ForEach si el portal no responde.
+- **En Azure:**
+  - el workspace monitoring equivale al *Diagnostic setting* de Data Factory que manda los logs a
+    Log Analytics (las dos cosas se consultan con KQL);
+  - Capacity Metrics, a las métricas de Azure Monitor;
+  - la alerta, a una regla de Azure Monitor con un *action group*, que sí manda a cualquier mail.
+- Doc: [workspace monitoring](https://learn.microsoft.com/en-us/fabric/fundamentals/enable-workspace-monitoring),
+  [logs de pipelines](https://learn.microsoft.com/en-us/fabric/data-factory/workspace-monitoring),
+  [ItemJobEventLogs](https://learn.microsoft.com/en-us/fabric/fundamentals/item-job-event-logs),
+  [alertas con Job events](https://learn.microsoft.com/en-us/fabric/real-time-hub/set-alerts-fabric-job-events),
+  [límites de Activator](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/data-activator/activator-limitations),
+  [Activator y Power Automate](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/data-activator/activator-trigger-power-automate-flows),
+  [Capacity Metrics](https://learn.microsoft.com/en-us/fabric/enterprise/metrics-app-install),
+  [concurrencia de Spark](https://learn.microsoft.com/en-us/fabric/data-engineering/spark-job-concurrency-and-queueing),
+  [throttling](https://learn.microsoft.com/en-us/fabric/enterprise/throttling).
