@@ -13,6 +13,14 @@
     {
       "name": "sql_host",
       "value": "cfvlzaavw54eljmzofachxxfx4-cb4qs76br2uulgjr3qcdtkzpda.datawarehouse.fabric.microsoft.com"
+    },
+    {
+      "name": "workspace_id",
+      "value": "7f097910-8ec1-45a9-9931-dc0439ab2f18"
+    },
+    {
+      "name": "lh_silver_id",
+      "value": "380feac5-4556-401c-ae46-12d8dbb75271"
     }
   ]
 }

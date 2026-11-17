@@ -18,6 +18,18 @@
       "note": "",
       "type": "String",
       "value": "cfvlzaavw54eljmzofachxxfx4-centshnyuhcetfu452th64yxfa.datawarehouse.fabric.microsoft.com"
+    },
+    {
+      "name": "workspace_id",
+      "note": "",
+      "type": "String",
+      "value": "1d391b11-a1b8-49c4-969c-eea67f731728"
+    },
+    {
+      "name": "lh_silver_id",
+      "note": "",
+      "type": "String",
+      "value": "4d2824b8-5893-4472-9a25-9da9e17a23c5"
     }
   ]
 }

@@ -12,8 +12,8 @@
       "properties": {
         "type": "Lakehouse",
         "typeProperties": {
-          "workspaceId": "7f097910-8ec1-45a9-9931-dc0439ab2f18",
-          "artifactId": "380feac5-4556-401c-ae46-12d8dbb75271"
+          "workspaceId": "$(/**/vl_oil/workspace_id)",
+          "artifactId": "$(/**/vl_oil/lh_silver_id)"
         }
       }
     }
