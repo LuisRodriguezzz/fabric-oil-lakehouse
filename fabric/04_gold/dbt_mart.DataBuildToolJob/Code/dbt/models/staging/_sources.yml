@@ -1,0 +1,173 @@
+version: 2
+sources:
+  - name: energia
+    description: Source data from energia
+    tables:
+      - name: fractura
+        description: Source table fractura
+        columns:
+          - name: id_base_fractura_adjiv
+            description: Column id_base_fractura_adjiv in fractura
+          - name: idpozo
+            description: Column idpozo in fractura
+          - name: sigla
+            description: Column sigla in fractura
+          - name: cuenca
+            description: Column cuenca in fractura
+          - name: areapermisoconcesion
+            description: Column areapermisoconcesion in fractura
+          - name: yacimiento
+            description: Column yacimiento in fractura
+          - name: formacion_productiva
+            description: Column formacion_productiva in fractura
+          - name: tipo_reservorio
+            description: Column tipo_reservorio in fractura
+          - name: subtipo_reservorio
+            description: Column subtipo_reservorio in fractura
+          - name: longitud_rama_horizontal_m
+            description: Column longitud_rama_horizontal_m in fractura
+          - name: cantidad_fracturas
+            description: Column cantidad_fracturas in fractura
+          - name: tipo_terminacion
+            description: Column tipo_terminacion in fractura
+          - name: arena_bombeada_nacional_tn
+            description: Column arena_bombeada_nacional_tn in fractura
+          - name: arena_bombeada_importada_tn
+            description: Column arena_bombeada_importada_tn in fractura
+          - name: agua_inyectada_m3
+            description: Column agua_inyectada_m3 in fractura
+          - name: co2_inyectado_m3
+            description: Column co2_inyectado_m3 in fractura
+          - name: presion_maxima_psi
+            description: Column presion_maxima_psi in fractura
+          - name: potencia_equipos_fractura_hp
+            description: Column potencia_equipos_fractura_hp in fractura
+          - name: fecha_inicio_fractura
+            description: Column fecha_inicio_fractura in fractura
+          - name: fecha_fin_fractura
+            description: Column fecha_fin_fractura in fractura
+          - name: fecha_data
+            description: Column fecha_data in fractura
+          - name: anio_if
+            description: Column anio_if in fractura
+          - name: mes_if
+            description: Column mes_if in fractura
+          - name: anio_ff
+            description: Column anio_ff in fractura
+          - name: mes_ff
+            description: Column mes_ff in fractura
+          - name: anio_carga
+            description: Column anio_carga in fractura
+          - name: mes_carga
+            description: Column mes_carga in fractura
+          - name: empresa_informante
+            description: Column empresa_informante in fractura
+          - name: mes
+            description: Column mes in fractura
+          - name: anio
+            description: Column anio in fractura
+          - name: ingest_date
+            description: Column ingest_date in fractura
+          - name: _archivo
+            description: Column _archivo in fractura
+          - name: _fuente
+            description: Column _fuente in fractura
+          - name: _version_origen
+            description: Column _version_origen in fractura
+          - name: _cargado_en
+            description: Column _cargado_en in fractura
+      - name: produccion_pozo
+        description: Source table produccion_pozo
+        columns:
+          - name: idempresa
+            description: Column idempresa in produccion_pozo
+          - name: anio
+            description: Column anio in produccion_pozo
+          - name: mes
+            description: Column mes in produccion_pozo
+          - name: idpozo
+            description: Column idpozo in produccion_pozo
+          - name: prod_pet
+            description: Column prod_pet in produccion_pozo
+          - name: prod_gas
+            description: Column prod_gas in produccion_pozo
+          - name: prod_agua
+            description: Column prod_agua in produccion_pozo
+          - name: iny_agua
+            description: Column iny_agua in produccion_pozo
+          - name: iny_gas
+            description: Column iny_gas in produccion_pozo
+          - name: iny_co2
+            description: Column iny_co2 in produccion_pozo
+          - name: iny_otro
+            description: Column iny_otro in produccion_pozo
+          - name: tef
+            description: Column tef in produccion_pozo
+          - name: vida_util
+            description: Column vida_util in produccion_pozo
+          - name: tipoextraccion
+            description: Column tipoextraccion in produccion_pozo
+          - name: tipoestado
+            description: Column tipoestado in produccion_pozo
+          - name: tipopozo
+            description: Column tipopozo in produccion_pozo
+          - name: observaciones
+            description: Column observaciones in produccion_pozo
+          - name: fechaingreso
+            description: Column fechaingreso in produccion_pozo
+          - name: rectificado
+            description: Column rectificado in produccion_pozo
+          - name: habilitado
+            description: Column habilitado in produccion_pozo
+          - name: idusuario
+            description: Column idusuario in produccion_pozo
+          - name: empresa
+            description: Column empresa in produccion_pozo
+          - name: sigla
+            description: Column sigla in produccion_pozo
+          - name: formprod
+            description: Column formprod in produccion_pozo
+          - name: profundidad
+            description: Column profundidad in produccion_pozo
+          - name: formacion
+            description: Column formacion in produccion_pozo
+          - name: idareapermisoconcesion
+            description: Column idareapermisoconcesion in produccion_pozo
+          - name: areapermisoconcesion
+            description: Column areapermisoconcesion in produccion_pozo
+          - name: idareayacimiento
+            description: Column idareayacimiento in produccion_pozo
+          - name: areayacimiento
+            description: Column areayacimiento in produccion_pozo
+          - name: cuenca
+            description: Column cuenca in produccion_pozo
+          - name: provincia
+            description: Column provincia in produccion_pozo
+          - name: tipo_de_recurso
+            description: Column tipo_de_recurso in produccion_pozo
+          - name: proyecto
+            description: Column proyecto in produccion_pozo
+          - name: clasificacion
+            description: Column clasificacion in produccion_pozo
+          - name: subclasificacion
+            description: Column subclasificacion in produccion_pozo
+          - name: sub_tipo_recurso
+            description: Column sub_tipo_recurso in produccion_pozo
+          - name: fecha_data
+            description: Column fecha_data in produccion_pozo
+          - name: id
+            description: Column id in produccion_pozo
+          - name: ingest_date
+            description: Column ingest_date in produccion_pozo
+          - name: _archivo
+            description: Column _archivo in produccion_pozo
+          - name: _fuente
+            description: Column _fuente in produccion_pozo
+          - name: _version_origen
+            description: Column _version_origen in produccion_pozo
+          - name: _cargado_en
+            description: Column _cargado_en in produccion_pozo
+          - name: _huella
+            description: Column _huella in produccion_pozo
+          - name: _actualizado_en
+            description: Column _actualizado_en in produccion_pozo

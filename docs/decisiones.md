@@ -892,3 +892,40 @@ library (D26), cuando gold empezó a leer silver por SQL.
   [data quality](https://learn.microsoft.com/en-us/fabric/data-engineering/materialized-lake-views/data-quality),
   [schedule](https://learn.microsoft.com/en-us/fabric/data-engineering/materialized-lake-views/schedule-lineage-run),
   [Direct Lake](https://learn.microsoft.com/en-us/fabric/fundamentals/direct-lake-overview).
+
+### D36. El mismo mart con un dbt job, para comparar con las MLV
+
+- **Qué:** el item `dbt_mart` (dbt job, GA) con el adapter de Lakehouse (`dbt-fabricspark`), que
+  escribe en `lh_silver`, schema `mart_dbt`. Dos capas: `staging` (`stg_fractura`,
+  `stg_produccion_pozo`, vistas 1 a 1 con silver, leídas con `source()`) y `marts` (los tres marts
+  de la D35, tablas, leídas con `ref()`). 12 tests (`unique` y `not_null` sobre la clave de cada
+  modelo). Resultado en feat: las mismas filas que las MLV (4.806, 48.941 y 4.725).
+- **Lakehouse, no Warehouse:** en un Warehouse conectado a Git, cualquier `CREATE TABLE` lo deja
+  como cambio pendiente y no se pueden excluir objetos: cada corrida de dbt ensuciaría `wh_gold`
+  y `dp-oil` desplegaría esas tablas como código. En el lakehouse, Git no guarda las tablas.
+  Alternativa descartada: `dbt-fabric` sobre `wh_gold`.
+- **El proyecto viaja con Git, sin repo aparte:** el commit guarda
+  `dbt_mart.DataBuildToolJob/Code/dbt/` (`dbt_project.yml`, modelos y `.yml`) y `dbt-content.json`.
+  La doc no lo decía; se comprobó en la rama. Alternativa descartada: un repo de GitHub aparte
+  (pide `dbt_project.yml` en la raíz, un PAT clásico, y el job queda en modo solo lectura).
+- **Lakehouse por ambiente con `vl_oil`:** `dbt-content.json` guardaba fijos el workspace y el
+  lakehouse de feat. Ahora apunta a `$(/**/vl_oil/workspace_id)` y `$(/**/vl_oil/lh_silver_id)`
+  (String, un valor por juego). El nombre de la conexión (`lh_silver`) y el schema (`mart_dbt`) no
+  aceptan variables: son iguales en los tres ambientes.
+- **`threads: 1`:** con 4, cada hilo abrió su propia sesión de Spark y una recibió el 430
+  (`TooManyRequestsForCapacity`) en la capacidad de 4 CU. Una corrida tarda unos 7 minutos, de los
+  cuales cerca de 4 son el arranque de Spark.
+- **Trampa del asistente:** *Create a new project* cambió el schema del perfil al de la fuente
+  (`energia`). Corrido así, dbt habría reemplazado las tablas de silver. Antes del primer `Run` se
+  revisa dónde escribe.
+- **MLV o dbt:** MLV para un mart simple dentro de Fabric (un `SELECT`, refresco que decide
+  Fabric, constraints que descartan filas). dbt cuando importan los tests, las capas, la
+  documentación o la portabilidad (el mismo proyecto corre en otro motor cambiando el adapter;
+  el SQL del modelo sí es del motor). Quedan los dos: las MLV en `mart` y dbt en `mart_dbt`.
+- **Falta:** correrlo en dev y prod después del deploy, y decidir cómo se programa (schedule propio
+  o actividad *dbt job* en `pl_ingesta`).
+- **En Azure:** no hay dbt nativo; se corre dbt Core en Azure DevOps o un contenedor, o dbt Cloud.
+- Doc: [dbt job](https://learn.microsoft.com/en-us/fabric/data-factory/dbt-job-overview),
+  [CI/CD con Variable library](https://learn.microsoft.com/en-us/fabric/data-factory/simplify-cicd-for-dbt-jobs),
+  [Git del Warehouse](https://learn.microsoft.com/en-us/fabric/data-warehouse/git-integration),
+  [dbt-fabricspark](https://docs.getdbt.com/docs/core/connect-data-platform/fabricspark-setup).

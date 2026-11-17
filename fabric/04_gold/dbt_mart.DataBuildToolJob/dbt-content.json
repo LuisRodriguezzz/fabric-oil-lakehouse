@@ -1,0 +1,28 @@
+{
+  "project": {
+    "projectType": "OneLake",
+    "folderPath": "dbt"
+  },
+  "profile": {
+    "profileType": "Lakehouse",
+    "schema": "mart_dbt",
+    "externalReferences": {},
+    "connectionSettings": {
+      "name": "lh_silver",
+      "properties": {
+        "type": "Lakehouse",
+        "typeProperties": {
+          "workspaceId": "$(/**/vl_oil/workspace_id)",
+          "artifactId": "$(/**/vl_oil/lh_silver_id)"
+        }
+      }
+    }
+  },
+  "command": {
+    "operation": "build",
+    "arguments": {
+      "exclude": "",
+      "threads": 1
+    }
+  }
+}
