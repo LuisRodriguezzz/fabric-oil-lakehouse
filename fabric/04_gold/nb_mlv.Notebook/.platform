@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "nb_mlv",
+    "description": "Marts sobre silver con materialized lake views (D35)."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "678ec04b-216e-99bb-4eb7-34a199afa3d3"
+  }
+}
