@@ -840,3 +840,55 @@ library (D26), cuando gold empezó a leer silver por SQL.
 - **En dos PR:** primero gold (tabla, columna y carga); después el modelo semántico (tabla `estado`
   y su relación), cuando `dim.estado` ya exista en dev, porque el modelo de feat lee el gold de dev.
 - **En Azure:** el mismo modelado de Kimball en Synapse dedicated SQL pool.
+- **Resultado (16/11):** en feat y en prod, `dim.pozo` quedó con 234.507 tramos (2,73 por pozo),
+  `dim.estado` con 17 filas y el fact con 18.408.823 filas, sin `estado_key` vacíos en la muestra.
+  El `MERGE` de la carga recalcula los tramos desde silver y borra los que sobran: no hizo falta
+  recargar gold desde cero.
+
+## Marts (fase 3)
+
+### D35. Marts sobre silver con materialized lake views
+
+- **Qué:** tres materialized lake views (MLV) en `lh_silver`, schema `mart`:
+  `fractura_por_pozo` (un pozo por fila: etapas, rama, arena y agua), `produccion_primer_anio`
+  (petróleo y gas de los 12 meses desde el primer mes productivo) y `fractura_vs_produccion`, que
+  lee de las otras dos. Una MLV guarda el resultado de un `SELECT` como tabla Delta y Fabric la
+  refresca en orden de dependencias (lineage). GA desde septiembre de 2026.
+- **Para qué sí y para qué no:** sí para marts que son un `SELECT` sobre silver. No para la carga de
+  gold: una MLV no tiene `IDENTITY` ni `MERGE` (no conserva `pozo_key` entre corridas), no puede
+  leer su propio resultado anterior y no confirma o deshace varias tablas juntas. Por eso gold sigue
+  en el Warehouse (D27). A diferencia de las declarative pipelines de Databricks, no tiene streaming
+  tables, `AUTO CDC` ni cuarentena: bronze y silver siguen con notebooks.
+- **Dónde:** en `lh_silver`, al lado de sus fuentes. La doc no recomienda un layout (el tutorial
+  usa un solo lakehouse con schemas). Alternativa descartada: un lakehouse de marts aparte, que
+  suma un item y lee de silver con lineage extendido sin ganar nada a este tamaño.
+- **Receta y plato:** el notebook `nb_mlv` viaja con Git y `dp-oil`; las MLV no (la página de Git
+  del lakehouse no las nombra). Se corre una vez por ambiente; `IF NOT EXISTS` lo hace seguro de
+  repetir y `CREATE OR REPLACE` cambia una definición. La primera celda fija `lh_silver` por
+  nombre con `%%configure`, sin IDs, así sirve en los tres ambientes.
+- **Refresco full:** el incremental pide Change Data Feed en todas las fuentes y que no reciban
+  updates ni deletes (o `REFRESH_HINT`, en preview). `fractura` se reemplaza entera (D33) y
+  `produccion_pozo` recibe `MERGE`. El SQL igual evita window functions y `DISTINCT`.
+- **Calidad:** `CONSTRAINT etapas_informadas CHECK (etapas IS NOT NULL) ON MISMATCH DROP`. El
+  primer refresco en feat procesó 4.806 pozos y no descartó ninguno.
+- **Schedule del lakehouse, no actividad de pipeline:** el schedule es GA; la actividad *Refresh
+  Materialized Lake View* está en preview, refresca todas las MLV del lakehouse y no acepta service
+  principal. Va a las 13:00, después de `pl_ingesta` (12:00). Si silver no cambió, el refresco
+  óptimo no recalcula. Se configura en cada ambiente.
+- **Resultado (feat, 16/11):** 4.806 pozos fracturados, 48.941 con primer año y 4.725 en el cruce
+  (81 fracturados sin meses productivos). Con el año completo, el petróleo promedio del primer año
+  sube con las etapas (de 4.242 m³ en 01-19 a 41.376 m³ en 60+), pero por etapa es parejo (unos
+  700 m³) y baja en 60+ (600 m³); por metro de rama queda en 11-12 m³. El largo de la rama explica
+  buena parte, y falta separar el año de la fractura.
+- **Lo que sigue:** Direct Lake on OneLake puede mezclar tablas de varios items y acepta una MLV
+  como tabla (no acepta vistas SQL comunes): `sm_oil` puede sumar `fractura_vs_produccion` con un
+  parámetro `LakehouseId` y su regla en `dp-oil`.
+- **En Azure:** Synapse no tiene un equivalente nativo; el pariente es la vista materializada de
+  Databricks. Con Synapse sería una vista de serverless SQL (recalcula en cada consulta) o un
+  pipeline con un stored procedure que inserta.
+- Doc: [overview](https://learn.microsoft.com/en-us/fabric/data-engineering/materialized-lake-views/overview-materialized-lake-view),
+  [create](https://learn.microsoft.com/en-us/fabric/data-engineering/materialized-lake-views/create-materialized-lake-view),
+  [refresh](https://learn.microsoft.com/en-us/fabric/data-engineering/materialized-lake-views/refresh-materialized-lake-view),
+  [data quality](https://learn.microsoft.com/en-us/fabric/data-engineering/materialized-lake-views/data-quality),
+  [schedule](https://learn.microsoft.com/en-us/fabric/data-engineering/materialized-lake-views/schedule-lineage-run),
+  [Direct Lake](https://learn.microsoft.com/en-us/fabric/fundamentals/direct-lake-overview).
