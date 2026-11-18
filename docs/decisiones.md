@@ -999,3 +999,69 @@ library (D26), cuando gold empezó a leer silver por SQL.
   [Capacity Metrics](https://learn.microsoft.com/en-us/fabric/enterprise/metrics-app-install),
   [concurrencia de Spark](https://learn.microsoft.com/en-us/fabric/data-engineering/spark-job-concurrency-and-queueing),
   [throttling](https://learn.microsoft.com/en-us/fabric/enterprise/throttling).
+
+## Tiempo real (laboratorio)
+
+### D38. Telemetría de pozos simulada: Eventstream, Eventhouse, Real-Time Dashboard y Activator
+
+- **Qué:** un laboratorio de Real-Time Intelligence en `oil-feat`, carpeta `06_tiempo_real`:
+  - `scripts/simular_telemetria.py` manda una lectura por pozo cada 5 segundos (presión, caudal y temperatura);
+  - `es_telemetria` la recibe y la reparte a dos destinos;
+  - `eh_telemetria` la guarda y se consulta con KQL;
+  - `rtd_telemetria` la muestra en vivo;
+  - `act_telemetria` avisa cuando un pozo pierde presión.
+  - **Los datos son simulados.** Los pozos son reales: los 20 de Vaca Muerta con más petróleo en
+    su primer año (`mart_dbt.fractura_vs_produccion`), y el caudal base es ese petróleo / 365.
+  - No va a prod: no hay nada real que operar.
+- **Fuente: custom endpoint con Microsoft Entra ID**, sin clave SAS. El simulador usa la misma
+  credencial que `fabric_api.py` y solo necesita el namespace y el nombre del event hub, que no
+  son secretos. Alternativa descartada: la cadena de conexión con clave.
+- **Destino Eventhouse en modo *Direct ingestion*.** Es lo más simple y barato, y el procesamiento
+  va en KQL. Alternativa descartada: *Event processing before ingestion* (operadores en el
+  Eventstream), que no hacía falta. Lo que hay que saber de este modo:
+  - no se puede pausar;
+  - la conexión a la tabla se configura después de publicar (asistente *Get data*);
+  - al desplegar a otro workspace hay que reconectarla.
+- **La tabla se crea con comandos KQL, no con el asistente:** `.create-merge table`, un mapeo JSON
+  propio y una retención de 30 días (el default es 3.650).
+  - Viaja con Git en `DatabaseSchema.kql`.
+  - El asistente proponía un mapeo nuevo (`telemetria_mapping`) que corría las columnas y
+    agregaba una de más: se eligió el mapeo existente.
+- **Latencia medida:** la base KQL de Fabric trae *streaming ingestion* prendido. Del evento a la
+  tabla tardó entre 0,1 y 60 segundos, sin tocar el batching.
+- **`dim.pozo` por shortcut de OneLake al `wh_gold`, acelerado y con identidad passthrough.**
+  - KQL lo lee con `external_table('dim_pozo')` y lo cruza con la telemetría.
+  - *Accelerate* guarda una copia en caché que Fabric sincroniza; conviene porque el tablero lo
+    consulta seguido.
+  - Passthrough: cada usuario lee con sus permisos.
+  - Alternativa descartada: copiar la dimensión al Eventhouse.
+  - **El shortcut no viaja con Git:** en otro workspace hay que crearlo de nuevo.
+- **Real-Time Dashboard, no Power BI**, para lo que se mira en vivo. Las consultas usan
+  `_startTime` y `_endTime`, que conectan cada tile con el selector de tiempo del tablero. El
+  tablero refresca solo en modo vista. *Live refresh* consulta cuando entran datos; *Auto
+  refresh*, cada X segundos.
+- **Activator conectado al Eventstream (`dst_alertas`), no a una consulta.**
+  - Evalúa cada evento, por objeto: `pozo`, con clave `idpozo`.
+  - La regla `presion_baja` es *Decreases below* 100, que por dentro es `BecomesLessThan`:
+    dispara una vez al cruzar el umbral.
+  - Con *Changes*, en el rato que estuvo así, fueron 2.665 activaciones: una por lectura.
+  - Resultado: el 162246 cruzó a las 01:18:08 UTC y hubo **una** activación. La acción salió a
+    las 01:20:51 (unos 3 minutos después), y el historial tardó varios minutos más en mostrarla.
+  - Lo que agrega entre pozos o compara ventanas (el caudal de la cuenca cae un 10 % en una
+    hora) va por una consulta KQL, no por una regla por objeto.
+  - El mail va al usuario del tenant y no llega (D37); se mira *History*.
+- **Costo en el trial:** el Eventstream cobra por hora mientras recibe eventos y deja de cobrar
+  después de 2 horas sin tráfico. El Eventhouse se suspende solo. No se prende *Capacity
+  Planner*, que reserva 2 CU fijas.
+- **En Azure:**
+  - Eventstream equivale a Event Hubs (con Stream Analytics si se procesa en el camino);
+  - Eventhouse, a Azure Data Explorer;
+  - el shortcut, a una *external table* de Data Explorer sobre el Data Lake;
+  - el Real-Time Dashboard, a los dashboards de Data Explorer;
+  - Activator, a una alerta de Azure Monitor o Stream Analytics más Logic Apps.
+- Doc: [custom endpoint](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/event-streams/add-source-custom-app),
+  [destino Eventhouse](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/event-streams/add-destination-kql-database),
+  [shortcuts en KQL](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/onelake-shortcuts),
+  [Real-Time Dashboard](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/dashboard-real-time-create),
+  [Activator](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/data-activator/activator-introduction),
+  [Git en RTI](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/git-deployment-pipelines).
