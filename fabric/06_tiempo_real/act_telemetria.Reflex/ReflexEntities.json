@@ -1,0 +1,121 @@
+[
+  {
+    "uniqueIdentifier": "8cc9765c-672d-4a6f-8f1d-e800123083f0",
+    "payload": {
+      "name": "EventStream",
+      "metadata": {
+        "eventstreamArtifactId": "70c329ab-fda2-4245-b235-b4a1fb4b309e"
+      }
+    },
+    "type": "eventstreamSource-v1"
+  },
+  {
+    "uniqueIdentifier": "e068d917-b247-4d86-9d32-5ed5bdd2104e",
+    "payload": {
+      "name": "es_telemetria-stream",
+      "definition": {
+        "type": "Event",
+        "instance": "{\"templateId\":\"SourceEvent\",\"templateVersion\":\"1.1\",\"steps\":[{\"name\":\"SourceEventStep\",\"id\":\"8451ab92-6929-43c8-bffa-73f062906b9f\",\"rows\":[{\"name\":\"SourceSelector\",\"kind\":\"SourceReference\",\"arguments\":[{\"name\":\"entityId\",\"type\":\"string\",\"value\":\"8cc9765c-672d-4a6f-8f1d-e800123083f0\"}]}]}]}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "3057dd0a-8ebc-41f0-ad66-1ccec17dc5b1",
+    "payload": {
+      "name": "pozo",
+      "definition": {
+        "type": "Object"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "c2ac9fbc-64d5-4db7-be34-082915afd44a",
+    "payload": {
+      "name": "idpozo",
+      "parentObject": {
+        "targetUniqueIdentifier": "3057dd0a-8ebc-41f0-ad66-1ccec17dc5b1"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"steps\":[{\"id\":\"f20a3d32-10ac-4242-a8ba-7ee26a5b1a03\",\"name\":\"IdPartStep\",\"rows\":[{\"arguments\":[{\"name\":\"op\",\"type\":\"string\",\"value\":\"Number\"},{\"name\":\"format\",\"type\":\"string\",\"value\":\"\"}],\"kind\":\"TypeAssertion\",\"name\":\"TypeAssertion\"}]}],\"templateId\":\"IdentityPartAttribute\",\"templateVersion\":\"1.3.1\"}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "cda1ca69-193d-4c31-a22f-b47235233df7",
+    "payload": {
+      "name": "idpozo",
+      "parentObject": {
+        "targetUniqueIdentifier": "3057dd0a-8ebc-41f0-ad66-1ccec17dc5b1"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"steps\":[{\"id\":\"4b1b98d9-0c41-43f1-85dc-244552fb79bf\",\"name\":\"IdStructureStep\",\"rows\":[{\"arguments\":[{\"arguments\":[{\"name\":\"entityId\",\"type\":\"string\",\"value\":\"c2ac9fbc-64d5-4db7-be34-082915afd44a\"}],\"kind\":\"AttributeReference\",\"name\":\"idPart\",\"type\":\"complex\"}],\"kind\":\"IdPart\",\"name\":\"IdPart\"}]}],\"templateId\":\"IdentityTupleAttribute\",\"templateVersion\":\"1.3.1\"}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "f253e152-9ea2-4dbd-9411-54d79c395614",
+    "payload": {
+      "name": "es_telemetria-stream",
+      "parentObject": {
+        "targetUniqueIdentifier": "3057dd0a-8ebc-41f0-ad66-1ccec17dc5b1"
+      },
+      "definition": {
+        "type": "Event",
+        "instance": "{\"steps\":[{\"id\":\"d68acdc6-7f3b-4663-b2ee-ec8337327b38\",\"name\":\"SplitEventStep\",\"rows\":[{\"arguments\":[{\"arguments\":[{\"name\":\"entityId\",\"type\":\"string\",\"value\":\"e068d917-b247-4d86-9d32-5ed5bdd2104e\"}],\"kind\":\"EventReference\",\"name\":\"event\",\"type\":\"complex\"}],\"kind\":\"Event\",\"name\":\"EventSelector\"},{\"arguments\":[{\"name\":\"fieldName\",\"type\":\"string\",\"value\":\"idpozo\"},{\"arguments\":[{\"name\":\"entityId\",\"type\":\"string\",\"value\":\"c2ac9fbc-64d5-4db7-be34-082915afd44a\"}],\"kind\":\"AttributeReference\",\"name\":\"idPart\",\"type\":\"complex\"}],\"kind\":\"FieldIdMapping\",\"name\":\"FieldIdMapping\"},{\"arguments\":[{\"name\":\"isAuthoritative\",\"type\":\"boolean\",\"value\":true}],\"kind\":\"EventOptions\",\"name\":\"SplitEventOptions\"}]}],\"templateId\":\"SplitEvent\",\"templateVersion\":\"1.3.1\"}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "8a30e526-7db5-46a8-b779-02997d5f01ed",
+    "payload": {
+      "name": "presion_bar",
+      "parentObject": {
+        "targetUniqueIdentifier": "3057dd0a-8ebc-41f0-ad66-1ccec17dc5b1"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"steps\":[{\"id\":\"e0f282cb-fae9-4c47-83bc-81deb71470cc\",\"name\":\"EventSelectStep\",\"rows\":[{\"arguments\":[{\"arguments\":[{\"name\":\"entityId\",\"type\":\"string\",\"value\":\"f253e152-9ea2-4dbd-9411-54d79c395614\"}],\"kind\":\"EventReference\",\"name\":\"event\",\"type\":\"complex\"}],\"kind\":\"Event\",\"name\":\"EventSelector\"},{\"arguments\":[{\"name\":\"fieldName\",\"type\":\"string\",\"value\":\"presion_bar\"}],\"kind\":\"EventField\",\"name\":\"EventFieldSelector\"}]},{\"id\":\"b85b870a-3bc1-4545-a7e8-9c1588d344a5\",\"name\":\"EventComputeStep\",\"rows\":[{\"arguments\":[{\"name\":\"op\",\"type\":\"string\",\"value\":\"Number\"},{\"name\":\"format\",\"type\":\"string\",\"value\":\"\"}],\"kind\":\"TypeAssertion\",\"name\":\"TypeAssertion\"}]}],\"templateId\":\"BasicEventAttribute\",\"templateVersion\":\"1.3.1\"}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "ccce8673-ab3a-4721-8e21-04feec62f607",
+    "payload": {
+      "name": "caudal_m3d",
+      "parentObject": {
+        "targetUniqueIdentifier": "3057dd0a-8ebc-41f0-ad66-1ccec17dc5b1"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"steps\":[{\"id\":\"4ef9ce16-1374-47a2-8e50-c105cb26ce3a\",\"name\":\"EventSelectStep\",\"rows\":[{\"arguments\":[{\"arguments\":[{\"name\":\"entityId\",\"type\":\"string\",\"value\":\"f253e152-9ea2-4dbd-9411-54d79c395614\"}],\"kind\":\"EventReference\",\"name\":\"event\",\"type\":\"complex\"}],\"kind\":\"Event\",\"name\":\"EventSelector\"},{\"arguments\":[{\"name\":\"fieldName\",\"type\":\"string\",\"value\":\"caudal_m3d\"}],\"kind\":\"EventField\",\"name\":\"EventFieldSelector\"}]},{\"id\":\"40f15d17-80e2-4a55-86ff-36b8e7b39aff\",\"name\":\"EventComputeStep\",\"rows\":[{\"arguments\":[{\"name\":\"op\",\"type\":\"string\",\"value\":\"Number\"},{\"name\":\"format\",\"type\":\"string\",\"value\":\"\"}],\"kind\":\"TypeAssertion\",\"name\":\"TypeAssertion\"}]}],\"templateId\":\"BasicEventAttribute\",\"templateVersion\":\"1.3.1\"}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "c1a4be09-dbac-4a5f-9aa6-8a9aa23e22e5",
+    "payload": {
+      "name": "presion_baja",
+      "parentObject": {
+        "targetUniqueIdentifier": "3057dd0a-8ebc-41f0-ad66-1ccec17dc5b1"
+      },
+      "definition": {
+        "type": "Rule",
+        "instance": "{\"steps\":[{\"id\":\"6f24d35b-f8e4-4ea9-9f16-9b48a1e7bcd7\",\"name\":\"ScalarSelectStep\",\"rows\":[{\"arguments\":[{\"arguments\":[{\"name\":\"entityId\",\"type\":\"string\",\"value\":\"8a30e526-7db5-46a8-b779-02997d5f01ed\"}],\"kind\":\"AttributeReference\",\"name\":\"attribute\",\"type\":\"complex\"}],\"kind\":\"Attribute\",\"name\":\"AttributeSelector\"}]},{\"id\":\"95bed27a-a257-47e4-8672-5898f0052537\",\"name\":\"ScalarDetectStep\",\"rows\":[{\"arguments\":[{\"name\":\"op\",\"type\":\"string\",\"value\":\"BecomesLessThan\"},{\"name\":\"value\",\"type\":\"number\",\"value\":100}],\"kind\":\"NumberBecomes\",\"name\":\"NumberBecomes\"},{\"arguments\":[],\"kind\":\"EachTime\",\"name\":\"OccurrenceOption\"}]},{\"id\":\"663adf21-7840-408d-8d86-dff0d6f0af33\",\"name\":\"ActStep\",\"rows\":[{\"arguments\":[{\"name\":\"messageLocale\",\"type\":\"string\",\"value\":\"en-us\"},{\"name\":\"sentTo\",\"type\":\"array\",\"values\":[{\"type\":\"string\",\"value\":\"luis@toto7argmail.onmicrosoft.com\"}]},{\"name\":\"copyTo\",\"type\":\"array\",\"values\":[]},{\"name\":\"bCCTo\",\"type\":\"array\",\"values\":[]},{\"name\":\"subject\",\"type\":\"array\",\"values\":[{\"type\":\"string\",\"value\":\"Activator alert presion_bar alert\"}]},{\"name\":\"headline\",\"type\":\"array\",\"values\":[{\"type\":\"string\",\"value\":\"The condition for 'presion_bar alert' has been met\"}]},{\"name\":\"optionalMessage\",\"type\":\"array\",\"values\":[{\"type\":\"string\",\"value\":\"\"}]},{\"name\":\"additionalInformation\",\"type\":\"array\",\"values\":[]}],\"kind\":\"EmailMessage\",\"name\":\"EmailBinding\"}]}],\"templateId\":\"AttributeTrigger\",\"templateVersion\":\"1.3.1\"}",
+        "settings": {
+          "shouldRun": true,
+          "shouldApplyRuleOnUpdate": true
+        }
+      }
+    },
+    "type": "timeSeriesView-v1"
+  }
+]

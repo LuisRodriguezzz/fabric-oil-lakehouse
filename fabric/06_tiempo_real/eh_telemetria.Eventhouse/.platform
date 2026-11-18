@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Eventhouse",
+    "displayName": "eh_telemetria",
+    "description": "eh_telemetria"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "be1876f9-84cd-95ee-4247-c64b337da194"
+  }
+}

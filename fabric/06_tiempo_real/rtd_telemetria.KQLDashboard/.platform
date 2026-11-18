@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "KQLDashboard",
+    "displayName": "rtd_telemetria",
+    "description": "rtd_telemetria"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "a9c76f4d-d808-8c4b-44ef-1f8e9c759ce1"
+  }
+}

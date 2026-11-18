@@ -1,0 +1,143 @@
+{
+  "sources": [
+    {
+      "id": "83744280-c150-4fe4-ae8f-c682573812e3",
+      "name": "src_simulador",
+      "type": "CustomEndpoint",
+      "properties": {}
+    }
+  ],
+  "destinations": [
+    {
+      "id": "5481b379-ede1-4076-bd3c-b18dbc76cbc4",
+      "name": "Eventhouse",
+      "type": "Eventhouse",
+      "properties": {
+        "dataIngestionMode": "DirectIngestion",
+        "workspaceId": "00000000-0000-0000-0000-000000000000",
+        "itemId": "4600c629-8927-9ce4-49bc-adfcf7ea1ca3",
+        "tableName": "",
+        "connectionName": "dc_telemetria",
+        "mappingRuleName": "telemetria_json"
+      },
+      "inputNodes": [
+        {
+          "name": "es_telemetria-stream"
+        }
+      ],
+      "inputSchemas": [
+        {
+          "name": "es_telemetria-stream",
+          "schema": {
+            "columns": [
+              {
+                "name": "idpozo",
+                "type": "BigInt",
+                "fields": null,
+                "items": null
+              },
+              {
+                "name": "ts",
+                "type": "Nvarchar(max)",
+                "fields": null,
+                "items": null
+              },
+              {
+                "name": "presion_bar",
+                "type": "Float",
+                "fields": null,
+                "items": null
+              },
+              {
+                "name": "caudal_m3d",
+                "type": "Float",
+                "fields": null,
+                "items": null
+              },
+              {
+                "name": "temperatura_c",
+                "type": "Float",
+                "fields": null,
+                "items": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "8cc9765c-672d-4a6f-8f1d-e800123083f0",
+      "name": "dst_alertas",
+      "type": "Activator",
+      "properties": {
+        "workspaceId": "00000000-0000-0000-0000-000000000000",
+        "itemId": "3d9e6234-7d54-ac88-41ef-db6313f2214e",
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "es_telemetria-stream"
+        }
+      ],
+      "inputSchemas": [
+        {
+          "name": "es_telemetria-stream",
+          "schema": {
+            "columns": [
+              {
+                "name": "idpozo",
+                "type": "BigInt",
+                "fields": null,
+                "items": null
+              },
+              {
+                "name": "ts",
+                "type": "Nvarchar(max)",
+                "fields": null,
+                "items": null
+              },
+              {
+                "name": "presion_bar",
+                "type": "Float",
+                "fields": null,
+                "items": null
+              },
+              {
+                "name": "caudal_m3d",
+                "type": "Float",
+                "fields": null,
+                "items": null
+              },
+              {
+                "name": "temperatura_c",
+                "type": "Float",
+                "fields": null,
+                "items": null
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "streams": [
+    {
+      "id": "67ad1aa4-a3fa-415a-b9bf-fbbc8f04c1fb",
+      "name": "es_telemetria-stream",
+      "type": "DefaultStream",
+      "properties": {},
+      "inputNodes": [
+        {
+          "name": "src_simulador"
+        }
+      ]
+    }
+  ],
+  "operators": [],
+  "compatibilityLevel": "1.1"
+}
