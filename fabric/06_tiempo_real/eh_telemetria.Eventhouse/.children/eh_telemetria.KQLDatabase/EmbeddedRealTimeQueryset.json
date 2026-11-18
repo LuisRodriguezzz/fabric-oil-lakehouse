@@ -1,0 +1,22 @@
+{
+  "queryset": {
+    "version": "1.0.0",
+    "dataSources": [
+      {
+        "id": "721cdb8a-027c-4bab-9dbf-c80469cf7864",
+        "clusterUri": "https://trd-5s43wbq48v35k687hg.z5.kusto.fabric.microsoft.com",
+        "type": "Fabric",
+        "databaseItemId": "f7ea1ca3-adfc-49bc-9ce4-89274600c629"
+      }
+    ],
+    "tabs": [
+      {
+        "id": "0e595031-5f65-4926-af58-b2c560f8b0a1",
+        "content": "let pozos = external_table('dim_pozo')\n    | where es_actual == true\n    | project idpozo, sigla, formacion, tipoextraccion;\ntelemetria\n| summarize arg_max(ts, *) by idpozo          // la última lectura de cada pozo\n| join kind=leftouter pozos on idpozo\n| project idpozo, sigla, formacion, tipoextraccion, ts, presion_bar, caudal_m3d, temperatura_c\n| order by caudal_m3d desc",
+        "title": "Tab",
+        "dataSourceId": "721cdb8a-027c-4bab-9dbf-c80469cf7864"
+      }
+    ],
+    "querysetType": "Embedded"
+  }
+}
