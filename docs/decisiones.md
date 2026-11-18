@@ -1,7 +1,7 @@
 # Decisiones
 
-Cada decisión dice qué se decidió, por qué, y cómo sería en Azure, que es el stack del aviso de
-Chevron. Marcas: **verificado** = leído en Microsoft Learn o probado en este proyecto;
+Cada decisión dice qué se decidió, por qué, y cómo sería en Azure, el stack de referencia
+con el que se compara. Marcas: **verificado** = leído en Microsoft Learn o probado en este proyecto;
 **criterio propio** = decisión de diseño sin una fuente que la imponga.
 
 ## Base del proyecto (F0)
@@ -157,7 +157,7 @@ fuente sume columnas es un caso muy común.
 - **El problema:** cuando se le da el esquema a un lector de CSV, Spark por defecto
   (`enforceSchema=True`) ignora el encabezado y asigna las columnas **por posición**. Si la
   fuente invierte dos columnas, bronze las mezcla sin avisar; si agrega una, la descarta.
-- **Probado** en el sandbox (9/11, notebook `prueba_encabezados` en `chevron-lab`): con el
+- **Probado** en un workspace de pruebas (9/11, notebook `prueba_encabezados`): con el
   encabezado `idpozo,prod_gas,prod_pet`, el pozo con 200 de petróleo y 7 de gas quedó con
   `prod_pet = 7`, y la columna extra `prod_agua` desapareció. Con `enforceSchema=False`, los dos
   casos fallan nombrando el archivo, y un archivo correcto pasa.
@@ -223,7 +223,7 @@ fuente sume columnas es un caso muy común.
      reprocesar, las tandas vuelven a empezar en 0, y con el id viejo Delta las descartaría.
 - **Dónde quedan:** en el schema `energia`, el sistema de origen (el portal de la Secretaría de
   Energía): `lh_bronze.energia.produccion` y `lh_bronze.energia.padron`.
-- **Probado** en el sandbox (10/11, notebook `prueba_d15` en `chevron-lab`, con el mismo
+- **Probado** en un workspace de pruebas (10/11, notebook `prueba_d15`, con el mismo
   `nb_bronze`, archivos reales del proyecto de Databricks y dos sintéticos):
 
   | Caso | Resultado |
@@ -233,7 +233,7 @@ fuente sume columnas es un caso muy común.
   | Entrega real con la columna nueva `pozo_horizontal` | La tabla pasa de 42 a 43 columnas; las 45.943 filas nuevas tienen valor y las 45.943 anteriores quedan en `null` |
   | `prod_pet` y `prod_gas` invertidas | `prod_pet = 200` y `prod_gas = 7`, como en el archivo |
   | Sin la columna `observaciones` | `observaciones` en `null`, el resto en su lugar |
-  | Nombre con schema desde SQL | `` `chevron-lab`.lh_bronze.energia.produccion `` responde (91.888 filas) |
+  | Nombre con schema desde SQL | `` `<workspace>`.lh_bronze.energia.produccion `` responde (91.888 filas) |
 
 - **En `oil-dev` (10/11):** 45.943 filas en `produccion` y 86.197 en `padron`; una segunda
   corrida no cambió nada (una sola versión de Delta).
