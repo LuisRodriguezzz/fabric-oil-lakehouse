@@ -1,21 +1,47 @@
-# Lo que cambia entre ambientes cuando fabric-cicd despliega (scripts/desplegar.py).
+# Lo que cambia entre ambientes cuando fabric-cicd despliega (scripts/desplegar.py, D20 y D39).
 #
-# Las referencias entre items del repo (el pipeline a nb_bronze, a lh_bronze, a sqldb_control)
-# viajan como logicalId y fabric-cicd las resuelve solo en el workspace de destino.
-# Las conexiones, no: viven en el tenant, no se despliegan, y el pipeline las nombra por GUID.
-#
-# En este laboratorio prod usa las mismas conexiones que dev (misma fuente, mismo gateway).
-# En una empresa, prod tendría las suyas (otro gateway, otra identidad) y acá iría su GUID.
+# Las referencias entre items del repo (el pipeline a nb_bronze, el reporte a sm_oil) viajan como
+# logicalId o byPath, y fabric-cicd las resuelve solas en el workspace de destino.
+# Lo que va acá es lo que no se resuelve solo. Microsoft recomienda la Variable library (vl_oil)
+# cuando el item la soporta; parameter.yml cubre el resto.
+
 find_replace:
-  - find_value: "76c6a138-50f9-412d-92d6-11d10f57391a"  # conexión a sqldb_control (Lookup y SP)
+  # Conexiones: viven en el tenant, no se despliegan, y el pipeline las nombra por GUID.
+  # En este laboratorio prod usa las mismas que dev (misma fuente, mismo gateway). En una empresa,
+  # prod tendría las suyas, con otra identidad, y acá iría su GUID.
+  - find_value: "76c6a138-50f9-412d-92d6-11d10f57391a"  # FabricSql luis: sqldb_control (Lookup y SP)
     replace_value:
       PROD: "76c6a138-50f9-412d-92d6-11d10f57391a"
     item_type: "DataPipeline"
-  - find_value: "d022c9b8-ce73-4a55-a795-aa38cad02256"  # oil-portal-energia-api-gw (Web)
+  - find_value: "c9d01b95-b8da-48e4-aa18-3bb9da34abc1"  # oil-fabric-refresco-endpoint luis (RefrescarSilver)
+    replace_value:
+      PROD: "c9d01b95-b8da-48e4-aa18-3bb9da34abc1"
+    item_type: "DataPipeline"
+  - find_value: "d022c9b8-ce73-4a55-a795-aa38cad02256"  # oil-portal-energia-api-gw (Version)
     replace_value:
       PROD: "d022c9b8-ce73-4a55-a795-aa38cad02256"
     item_type: "DataPipeline"
-  - find_value: "05cd0303-8717-4129-bc6e-b6c62ff4aa2d"  # oil-portal-energia-http-gw (Copy)
+  - find_value: "05cd0303-8717-4129-bc6e-b6c62ff4aa2d"  # oil-portal-energia-http-gw (BajarCSV)
     replace_value:
       PROD: "05cd0303-8717-4129-bc6e-b6c62ff4aa2d"
     item_type: "DataPipeline"
+
+  # Modelo semántico: los parámetros M WorkspaceId y WarehouseId traen los valores de dev.
+  # En prod pasan a ser el workspace de destino y su wh_gold, resueltos por fabric-cicd en el
+  # momento del deploy (antes lo hacía la regla de parámetros de dp-oil, D29).
+  - find_value: "1d391b11-a1b8-49c4-969c-eea67f731728"  # oil-dev
+    replace_value:
+      PROD: "$workspace.$id"
+    item_type: "SemanticModel"
+  - find_value: "e5cd7adc-81db-4583-8e77-ffbae3da04e1"  # wh_gold de dev
+    replace_value:
+      PROD: "$items.Warehouse.wh_gold.$id"
+    item_type: "SemanticModel"
+
+key_value_replace:
+  # El schedule viaja en Git apagado (dev y feat no corren solos) y se prende solo en prod.
+  - find_key: "$.schedules[*].enabled"
+    replace_value:
+      PROD: true
+    item_type: "DataPipeline"
+    item_name: "pl_ingesta"

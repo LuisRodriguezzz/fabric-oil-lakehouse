@@ -1,24 +1,37 @@
-# CD con GitHub Actions: lo mismo que azure-pipelines.yml, en GitHub.
-# Despliega el repo en oil-prod con fabric-cicd después de que pasen los tests.
+# CD con GitHub Actions: despliega el repo en oil-prod con fabric-cicd (D20, D39).
 #
-# Lo que hace falta una sola vez (todavía no está armado):
-#   1. En Entra ID, una app registration (service principal) con una credencial federada para este
-#      repo y el environment "oil-prod": GitHub entra por OIDC, sin contraseña.
-#   2. En GitHub, el environment "oil-prod" con aprobación obligatoria, y las variables
-#      AZURE_CLIENT_ID y AZURE_TENANT_ID.
-#   3. En Fabric, el switch de tenant "Service principals can use Fabric APIs" y el service
-#      principal como Contributor de oil-prod.
+# Circuito: merge a main → tests (pruebas.yml) → el job "prod" espera la aprobación del
+# environment oil-prod → azure/login con OIDC (sin contraseña) → scripts/desplegar.py PROD.
+#
+# Lo que hay que tener armado una sola vez:
+#   1. En Entra ID, la app sp-oil-cicd con una credencial federada para este repo y el environment
+#      oil-prod (subject con IDs inmutables: repo:<owner>@<id>/<repo>@<id>:environment:oil-prod).
+#   2. En GitHub, el environment oil-prod con aprobación obligatoria, y las variables
+#      AZURE_CLIENT_ID y AZURE_TENANT_ID (no son secretos).
+#   3. En Fabric, el tenant setting "Service principals can call Fabric public APIs" para el grupo
+#      sg-fabric-automatizacion, el robot como Member de oil-prod y como usuario de las 4
+#      conexiones del pipeline.
 name: desplegar
 
 on:
-  # Solo a mano hasta la fase 2: todavía no existen el service principal ni su permiso en Fabric,
-  # así que un despliegue automático fallaría al iniciar sesión. Cuando existan, se vuelve a
-  # agregar el disparo con cada push a main (rutas fabric/** y scripts/desplegar.py).
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "fabric/**"
+      - "scripts/desplegar.py"
+      - "scripts/fabric_api.py"
+      - "requirements.txt"
+      - ".github/workflows/desplegar.yml"
+  workflow_dispatch:   # también a mano, por ejemplo para volver a desplegar lo que está en main
 
 permissions:
   id-token: write      # para pedir el token OIDC
   contents: read
+
+# Nunca dos despliegues a prod al mismo tiempo; el segundo espera al primero.
+concurrency:
+  group: desplegar-oil-prod
+  cancel-in-progress: false
 
 jobs:
   pruebas:
@@ -39,4 +52,7 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true   # no hay suscripción de Azure: solo Fabric
-      - run: python scripts/desplegar.py PROD
+      - name: Vista previa de los reemplazos por ambiente
+        run: python scripts/desplegar.py PROD --previa
+      - name: Desplegar en oil-prod
+        run: python scripts/desplegar.py PROD

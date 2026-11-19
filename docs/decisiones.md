@@ -1066,3 +1066,62 @@ library (D26), cuando gold empezó a leer silver por SQL.
   [Real-Time Dashboard](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/dashboard-real-time-create),
   [Activator](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/data-activator/activator-introduction),
   [Git en RTI](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/git-deployment-pipelines).
+
+## CI/CD real (fase 2)
+
+### D39. Prod se despliega solo desde `main`, con un service principal sin contraseña y aprobación
+
+- **Circuito:** merge a `main` → `pruebas.yml` → el job `prod` de `desplegar.yml` espera la
+  aprobación del environment `oil-prod` de GitHub → `azure/login` con OIDC →
+  `scripts/desplegar.py PROD` (`fabric-cicd` 1.4.0). Corre si cambia `fabric/` o el script, y
+  también a mano. `concurrency` evita dos despliegues a la vez.
+  - **Un solo camino a prod:** cuando ande, `dp-oil` deja de usarse para el batch, porque dos
+    caminos terminan en *drift*.
+  - Alternativa descartada: el tag de release de la "opción 2" de Microsoft. Las aprobaciones de
+    un environment no existen en repos privados de GitHub Free, así que el repo pasó a público.
+- **Identidad:** la app `sp-oil-cicd` (single tenant, **sin client secret**), con una credencial
+  federada para GitHub atada al **environment** `oil-prod`, no a la rama: solo un job aprobado
+  obtiene el token.
+  - El subject usa los IDs inmutables de cuenta y repo,
+    `repo:LuisRodriguezzz@131310791/fabric-oil-lakehouse@1451767323:environment:oil-prod`. Es el
+    formato nuevo: el repo emite `use_immutable_subject: true`, y el formato viejo
+    `repo:<owner>/<repo>:…` no coincidiría.
+- **Permisos mínimos en Fabric:**
+  - el tenant setting *Service principals can call Fabric public APIs*, solo para el grupo
+    `sg-fabric-automatizacion`;
+  - el robot es **Member** de `oil-prod`: Admin sobra, y Contributor no está confirmado para
+    todos los tipos;
+  - es usuario de las 4 conexiones de `pl_ingesta`.
+  - El robot no ve las credenciales: el pipeline corre con las de cada conexión. La identidad del
+    deploy no es la identidad de la corrida.
+- **Qué se despliega:** Lakehouse, Warehouse, SQLDatabase, VariableLibrary, Notebook,
+  DataPipeline, DataBuildToolJob, SemanticModel y Report. Quedan afuera:
+  - el tiempo real (D38): un service principal no puede crear ni actualizar un Activator;
+  - lo que vive solo en prod (el monitoreo y `act_oil`).
+  - No se llama a `unpublish_all_orphan_items`: con el alcance recortado, la doc de
+    `fabric-cicd` lo desaconseja. Un borrado se hace a mano, como con `dp-oil`.
+- **Configuración por ambiente:**
+  - el juego activo de `vl_oil` sale del argumento `environment="PROD"`;
+  - `parameter.yml` suma la cuarta conexión (RefrescarSilver), que faltaba;
+  - también suma los parámetros M del modelo semántico, con variables dinámicas
+    (`$workspace.$id` y `$items.Warehouse.wh_gold.$id`), que reemplazan la regla de parámetros de
+    `dp-oil` (D29).
+  - `desplegar.py --previa` muestra los reemplazos sin publicar. Corrido contra prod el 18/11: el
+    modelo apunta al workspace y al `wh_gold` de prod, que es el mismo ID que tiene `vl_oil` PROD.
+- **El schedule pasa a Git** (`pl_ingesta.DataPipeline/.schedules`), **apagado**, y
+  `key_value_replace` lo prende solo en PROD. Así queda versionado y dev no corre solo. Cierra la
+  duda pendiente sobre el schedule (D25).
+  - Qué hace la API con el schedule que ya existe en prod (si lo reemplaza o crea otro) se
+    comprueba en el primer despliegue.
+- **Límite conocido:** para Warehouse y SQL database, `fabric-cicd` publica solo la cáscara del
+  item. Un cambio de esquema (DDL) no llega a prod por este camino: hace falta un paso con el
+  DACPAC (pendiente) o `dp-oil` para ese caso.
+- **En Azure:** es el release de Azure DevOps (o GitHub Actions) que despliega el ARM template de
+  Data Factory con una service connection por *workload identity federation* y aprobación del
+  environment. Los linked services sí viajan en el ARM; en Fabric, las conexiones viven en el
+  tenant y el pipeline las nombra por ID.
+- Doc: [opciones de despliegue](https://learn.microsoft.com/en-us/fabric/cicd/manage-deployment),
+  [fabric-cicd](https://microsoft.github.io/fabric-cicd/latest/),
+  [parametrización](https://microsoft.github.io/fabric-cicd/latest/how_to/parameterization/),
+  [tenant settings de desarrollador](https://learn.microsoft.com/en-us/fabric/admin/service-admin-portal-developer),
+  [credencial federada](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust).
