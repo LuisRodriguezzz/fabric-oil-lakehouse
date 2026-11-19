@@ -45,7 +45,7 @@ Primero, la consulta 3: qué actividad falló y con qué error.
 | `CapacityLimitExceeded` | Throttling: la capacidad consumió más de lo que tiene | En Capacity Metrics, página *Compute*: ver qué consumió. Esperar a que baje y relanzar |
 | `Gold` falla en un control | `carga.cargar_gold` encontró un problema en los datos y deshizo la transacción. Gold queda con los datos anteriores | **No relanzar a ciegas.** Leer el mensaje del control, revisar silver y corregir el origen (D27) |
 | `RefrescarSilver` falla | El refresco del SQL endpoint | Relanzar. Si se repite, ver la D26 |
-| Todo inactivo | Venció el trial | Ver CLAUDE.md: hace falta una capacidad paga (decisión de Luis) |
+| Todo inactivo | Venció el trial | Hace falta una capacidad paga (decisión de Luis) |
 
 ## Cómo relanzar
 

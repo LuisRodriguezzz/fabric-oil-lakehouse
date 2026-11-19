@@ -1066,3 +1066,104 @@ library (D26), cuando gold empezó a leer silver por SQL.
   [Real-Time Dashboard](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/dashboard-real-time-create),
   [Activator](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/data-activator/activator-introduction),
   [Git en RTI](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/git-deployment-pipelines).
+
+## CI/CD real (fase 2)
+
+### D39. Prod se despliega solo desde `main`, con un service principal sin contraseña y aprobación
+
+- **Circuito:** merge a `main` → `pruebas.yml` → el job `prod` de `desplegar.yml` espera la
+  aprobación del environment `oil-prod` de GitHub → `azure/login` con OIDC →
+  `scripts/desplegar.py PROD` (`fabric-cicd` 1.4.0). Corre si cambia `fabric/` o el script, y
+  también a mano. `concurrency` evita dos despliegues a la vez.
+  - **Un solo camino a prod:** cuando ande, `dp-oil` deja de usarse para el batch, porque dos
+    caminos terminan en *drift*.
+  - Alternativa descartada: el tag de release de la "opción 2" de Microsoft. Las aprobaciones de
+    un environment no existen en repos privados de GitHub Free, así que el repo pasó a público.
+- **Identidad:** la app `sp-oil-cicd` (single tenant, **sin client secret**), con una credencial
+  federada para GitHub atada al **environment** `oil-prod`, no a la rama: solo un job aprobado
+  obtiene el token.
+  - El subject usa los IDs inmutables de cuenta y repo,
+    `repo:LuisRodriguezzz@131310791/fabric-oil-lakehouse@1451767323:environment:oil-prod`. Es el
+    formato nuevo: el repo emite `use_immutable_subject: true`, y el formato viejo
+    `repo:<owner>/<repo>:…` no coincidiría.
+- **Permisos mínimos en Fabric:**
+  - el tenant setting *Service principals can call Fabric public APIs*, solo para el grupo
+    `sg-fabric-automatizacion`;
+  - el robot es **Member** de `oil-prod`: Admin sobra, y Contributor no está confirmado para
+    todos los tipos;
+  - es usuario de las 4 conexiones de `pl_ingesta`.
+  - El robot no ve las credenciales: el pipeline corre con las de cada conexión. La identidad del
+    deploy no es la identidad de la corrida.
+- **Qué se despliega:** Lakehouse, Warehouse, SQLDatabase, VariableLibrary, Notebook,
+  DataPipeline, DataBuildToolJob, SemanticModel y Report. Quedan afuera:
+  - el tiempo real (D38): un service principal no puede crear ni actualizar un Activator;
+  - lo que vive solo en prod (el monitoreo y `act_oil`).
+  - No se llama a `unpublish_all_orphan_items`: con el alcance recortado, la doc de
+    `fabric-cicd` lo desaconseja. Un borrado se hace a mano, como con `dp-oil`.
+- **Configuración por ambiente:**
+  - el juego activo de `vl_oil` sale del argumento `environment="PROD"`;
+  - `parameter.yml` suma la cuarta conexión (RefrescarSilver), que faltaba;
+  - también suma los parámetros M del modelo semántico, con variables dinámicas
+    (`$workspace.$id` y `$items.Warehouse.wh_gold.$id`), que reemplazan la regla de parámetros de
+    `dp-oil` (D29).
+  - `desplegar.py --previa` muestra los reemplazos sin publicar. Corrido contra prod el 18/11: el
+    modelo apunta al workspace y al `wh_gold` de prod, que es el mismo ID que tiene `vl_oil` PROD.
+- **El schedule pasa a Git** (`pl_ingesta.DataPipeline/.schedules`), **apagado**, y
+  `key_value_replace` lo prende solo en PROD. Así queda versionado y dev no corre solo. Cierra la
+  duda pendiente sobre el schedule (D25).
+  - Qué hace la API con el schedule que ya existe en prod (si lo reemplaza o crea otro) se
+    comprueba en el primer despliegue.
+- **Límite conocido:** para Warehouse y SQL database, `fabric-cicd` publica solo la cáscara del
+  item. Un cambio de esquema (DDL) no llega a prod por este camino: hace falta un paso con el
+  DACPAC (pendiente) o `dp-oil` para ese caso.
+- **En Azure:** es el release de Azure DevOps (o GitHub Actions) que despliega el ARM template de
+  Data Factory con una service connection por *workload identity federation* y aprobación del
+  environment. Los linked services sí viajan en el ARM; en Fabric, las conexiones viven en el
+  tenant y el pipeline las nombra por ID.
+- Doc: [opciones de despliegue](https://learn.microsoft.com/en-us/fabric/cicd/manage-deployment),
+  [fabric-cicd](https://microsoft.github.io/fabric-cicd/latest/),
+  [parametrización](https://microsoft.github.io/fabric-cicd/latest/how_to/parameterization/),
+  [tenant settings de desarrollador](https://learn.microsoft.com/en-us/fabric/admin/service-admin-portal-developer),
+  [credencial federada](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust).
+
+### D40. El esquema de gold y de control llega a prod con DACPAC y SqlPackage
+
+- **Por qué:** `fabric-cicd` publica el Warehouse y la SQL database solo como "cáscara" (D39). Las
+  tablas, vistas y procedimientos (el DDL) necesitan otro camino. `dp-oil` lo hacía por dentro con
+  un DACPAC; ahora lo hace el CD.
+- **Qué hace** `scripts/desplegar_esquema.py PROD`:
+  1. `dotnet build` de cada `.sqlproj` del repo: arma un **DACPAC**, el paquete con el esquema
+     completo de la base;
+  2. **SqlPackage** lo compara con la base de prod y aplica solo la diferencia.
+  - Con `--previa` genera el script SQL de esa diferencia **sin aplicarlo** (`/Action:Script`).
+  - El servidor y la base de cada ambiente salen de la API de Fabric. Para la SQL database, el
+    nombre real lleva un sufijo con un GUID.
+- **Reglas para una base con datos:**
+  - `BlockOnPossibleDataLoss=True`: frena si un cambio puede perder datos;
+  - `DropObjectsNotInSource=False`: no borra lo que no esté en el repo;
+  - `AllowTableRecreation=False`: no reconstruye tablas. En un Warehouse el `ALTER TABLE` es
+    limitado, y muchos cambios terminarían recreando la tabla.
+  - Un cambio que estas reglas frenan se planifica a mano: es una migración, no un deploy.
+- **Identidad:** la misma que el resto del deploy. SqlPackage recibe un token de Entra
+  (`/AccessToken`, scope `https://database.windows.net/.default`). En GitHub, el del service
+  principal, que como Member del workspace puede hacer DDL.
+- **Probado el 18/11 contra prod, sin aplicar:**
+  - `wh_gold` da **0 cambios** (prod ya tiene el esquema del repo);
+  - `sqldb_control` da 0 cambios de esquema; solo correría su post-deploy, que es idempotente.
+  - Las dos bases compilan tal como las exporta Git. Hay dos avisos esperables:
+    - referencias a `lh_silver`, que vive fuera del Warehouse;
+    - un `PackageReference` duplicado en el `.sqlproj` de control, que genera Fabric.
+- **En el workflow:** después de `fabric-cicd`, instala SqlPackage
+  (`dotnet tool install -g microsoft.sqlpackage`), muestra la previa y aplica. El runner queda fijo
+  en `ubuntu-24.04` (trae el SDK de .NET 8), porque `ubuntu-latest` va a cambiar de versión.
+- **Estado:** el soporte de SQL projects para Fabric Data Warehouse está en **preview**
+  (`SqlDwUnifiedDatabaseSchemaProvider`), igual que el de la SQL database
+  (`SqlDbFabricDatabaseSchemaProvider`). Se usa porque es el único camino para el DDL en un CD
+  externo, y es el mismo motor (DacFx) que usa Fabric por dentro con Git y con `dp-oil`.
+- **En Azure:** es exactamente cómo se despliega una Azure SQL o un pool dedicado de Synapse
+  desde Azure DevOps o GitHub: proyecto SQL, DACPAC y SqlPackage (o la tarea
+  `SqlAzureDacpacDeployment`).
+- Doc: [SQL projects en Warehouse](https://learn.microsoft.com/en-us/fabric/data-warehouse/develop-warehouse-project),
+  [scripts de despliegue del Warehouse](https://learn.microsoft.com/en-us/fabric/data-warehouse/deployment-scripts),
+  [SqlPackage con SQL database](https://learn.microsoft.com/en-us/fabric/database/sql/sqlpackage),
+  [plataformas de destino](https://learn.microsoft.com/en-us/sql/tools/sql-database-projects/concepts/target-platform).
