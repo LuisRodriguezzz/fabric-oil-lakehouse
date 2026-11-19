@@ -31,7 +31,8 @@ rama + PR ──► pruebas.yml (pytest de silver) ──► merge a main ──
                                                      │
                                                      └──► desplegar.yml: aprobación del environment
                                                           oil-prod ──► azure/login (OIDC, sin
-                                                          contraseña) ──► fabric-cicd ──► oil-prod
+                                                          contraseña) ──► fabric-cicd (items)
+                                                          ──► SqlPackage (esquema) ──► oil-prod
 ```
 
 Tres workspaces: `oil-dev` (conectado a Git, rama `main`), `oil-feat` (una rama por tarea) y
@@ -41,7 +42,7 @@ Tres workspaces: `oil-dev` (conectado a Git, rama `main`), `oil-feat` (una rama 
 
 ```
 docs/
-  decisiones.md        decisiones numeradas (D1 a D39)
+  decisiones.md        decisiones numeradas (D1 a D40)
   operacion/           consultas KQL de monitoreo, runbook y postmortems (D37)
 fabric/                items de Fabric, en carpetas del workspace (D31)
   00_control/
@@ -83,6 +84,7 @@ azure-pipelines.yml    el mismo CD en Azure DevOps (escrito, sin correr)
 | | `contar_delta.py` | Cuenta las filas de una tabla leyendo su `_delta_log`, sin Spark |
 | | `subir_a_landing.py` | Deja una entrega en landing, como lo haría el proveedor (D9) |
 | CI/CD | `desplegar.py` | Despliega `fabric/` en un ambiente con `fabric-cicd`; `--previa` muestra los reemplazos sin publicar |
+| | `desplegar_esquema.py` | Despliega el esquema de `wh_gold` y `sqldb_control` con DACPAC y SqlPackage; `--previa` genera el script SQL sin aplicarlo (D40) |
 | Laboratorio | `simular_telemetria.py` | Manda telemetría simulada de pozos al Eventstream (D38) |
 
 ## Uso diario

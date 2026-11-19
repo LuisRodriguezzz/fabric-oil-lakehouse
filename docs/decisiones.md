@@ -1125,3 +1125,45 @@ library (D26), cuando gold empezó a leer silver por SQL.
   [parametrización](https://microsoft.github.io/fabric-cicd/latest/how_to/parameterization/),
   [tenant settings de desarrollador](https://learn.microsoft.com/en-us/fabric/admin/service-admin-portal-developer),
   [credencial federada](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust).
+
+### D40. El esquema de gold y de control llega a prod con DACPAC y SqlPackage
+
+- **Por qué:** `fabric-cicd` publica el Warehouse y la SQL database solo como "cáscara" (D39). Las
+  tablas, vistas y procedimientos (el DDL) necesitan otro camino. `dp-oil` lo hacía por dentro con
+  un DACPAC; ahora lo hace el CD.
+- **Qué hace** `scripts/desplegar_esquema.py PROD`:
+  1. `dotnet build` de cada `.sqlproj` del repo: arma un **DACPAC**, el paquete con el esquema
+     completo de la base;
+  2. **SqlPackage** lo compara con la base de prod y aplica solo la diferencia.
+  - Con `--previa` genera el script SQL de esa diferencia **sin aplicarlo** (`/Action:Script`).
+  - El servidor y la base de cada ambiente salen de la API de Fabric. Para la SQL database, el
+    nombre real lleva un sufijo con un GUID.
+- **Reglas para una base con datos:**
+  - `BlockOnPossibleDataLoss=True`: frena si un cambio puede perder datos;
+  - `DropObjectsNotInSource=False`: no borra lo que no esté en el repo;
+  - `AllowTableRecreation=False`: no reconstruye tablas. En un Warehouse el `ALTER TABLE` es
+    limitado, y muchos cambios terminarían recreando la tabla.
+  - Un cambio que estas reglas frenan se planifica a mano: es una migración, no un deploy.
+- **Identidad:** la misma que el resto del deploy. SqlPackage recibe un token de Entra
+  (`/AccessToken`, scope `https://database.windows.net/.default`). En GitHub, el del service
+  principal, que como Member del workspace puede hacer DDL.
+- **Probado el 18/11 contra prod, sin aplicar:**
+  - `wh_gold` da **0 cambios** (prod ya tiene el esquema del repo);
+  - `sqldb_control` da 0 cambios de esquema; solo correría su post-deploy, que es idempotente.
+  - Las dos bases compilan tal como las exporta Git. Hay dos avisos esperables:
+    - referencias a `lh_silver`, que vive fuera del Warehouse;
+    - un `PackageReference` duplicado en el `.sqlproj` de control, que genera Fabric.
+- **En el workflow:** después de `fabric-cicd`, instala SqlPackage
+  (`dotnet tool install -g microsoft.sqlpackage`), muestra la previa y aplica. El runner queda fijo
+  en `ubuntu-24.04` (trae el SDK de .NET 8), porque `ubuntu-latest` va a cambiar de versión.
+- **Estado:** el soporte de SQL projects para Fabric Data Warehouse está en **preview**
+  (`SqlDwUnifiedDatabaseSchemaProvider`), igual que el de la SQL database
+  (`SqlDbFabricDatabaseSchemaProvider`). Se usa porque es el único camino para el DDL en un CD
+  externo, y es el mismo motor (DacFx) que usa Fabric por dentro con Git y con `dp-oil`.
+- **En Azure:** es exactamente cómo se despliega una Azure SQL o un pool dedicado de Synapse
+  desde Azure DevOps o GitHub: proyecto SQL, DACPAC y SqlPackage (o la tarea
+  `SqlAzureDacpacDeployment`).
+- Doc: [SQL projects en Warehouse](https://learn.microsoft.com/en-us/fabric/data-warehouse/develop-warehouse-project),
+  [scripts de despliegue del Warehouse](https://learn.microsoft.com/en-us/fabric/data-warehouse/deployment-scripts),
+  [SqlPackage con SQL database](https://learn.microsoft.com/en-us/fabric/database/sql/sqlpackage),
+  [plataformas de destino](https://learn.microsoft.com/en-us/sql/tools/sql-database-projects/concepts/target-platform).

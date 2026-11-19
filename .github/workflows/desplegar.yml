@@ -19,6 +19,7 @@ on:
     paths:
       - "fabric/**"
       - "scripts/desplegar.py"
+      - "scripts/desplegar_esquema.py"
       - "scripts/fabric_api.py"
       - "requirements.txt"
       - ".github/workflows/desplegar.yml"
@@ -39,7 +40,7 @@ jobs:
 
   prod:
     needs: pruebas
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # fijo: ubuntu-latest va a cambiar de versión, y con él el SDK de .NET
     environment: oil-prod   # la aprobación se configura en GitHub, en este environment
     steps:
       - uses: actions/checkout@v4
@@ -56,3 +57,10 @@ jobs:
         run: python scripts/desplegar.py PROD --previa
       - name: Desplegar en oil-prod
         run: python scripts/desplegar.py PROD
+      # El esquema de wh_gold y sqldb_control (D40): fabric-cicd publica solo la cáscara de esos
+      # items, así que el DDL va con DACPAC + SqlPackage. El runner trae el SDK de .NET 8.
+      - run: dotnet tool install -g microsoft.sqlpackage
+      - name: Vista previa del esquema (script SQL de la diferencia)
+        run: python scripts/desplegar_esquema.py PROD --previa
+      - name: Desplegar el esquema
+        run: python scripts/desplegar_esquema.py PROD
