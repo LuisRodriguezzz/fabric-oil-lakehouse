@@ -1,7 +1,8 @@
 # Decisiones
 
-Cada decisión dice qué se decidió, por qué, y cómo sería en Azure, el stack de referencia
-con el que se compara. Marcas: **verificado** = leído en Microsoft Learn o probado en este proyecto;
+Cada decisión dice qué se decidió en Fabric, por qué y qué alternativa se descartó. Al final,
+una línea con su equivalente en Azure (Data Factory, Synapse), para quien viene de ese stack.
+Marcas: **verificado** = leído en Microsoft Learn o probado en este proyecto;
 **criterio propio** = decisión de diseño sin una fuente que la imponga.
 
 ## Base del proyecto (F0)
